@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Handler VERSION 0.4.0 LANGUAGES CXX)
+project(Handler VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,6 +30,11 @@ add_executable(handler
     src/decision_engine.cpp
     src/recovery.cpp
     src/circuit_breaker.cpp
+    src/environment_health.cpp
+    src/path_guardian.cpp
+    src/environment_guardian.cpp
+    src/resource_guardian.cpp
+    src/toolchain_doctor.cpp
 )
 
 target_include_directories(handler PRIVATE include)
