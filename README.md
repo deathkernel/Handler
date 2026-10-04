@@ -561,6 +561,20 @@ Level 2 is intentionally **observation-only**. It discovers and models the envir
 - handler deps
 - handler graph
 
+## Level 3 Implementation Notes
+
+Level 3 establishes Handler's safety and verification foundation before any automatic repair is introduced.
+
+Implemented:
+- **Verification Engine** — file/directory outcome checks.
+- **Permission & Safety Policies** — Auto, Confirm, and Strict modes with risk levels.
+- **Snapshots** — serialized environment-state recovery points.
+- **Transaction Foundation** — action → verification → commit, with rollback callback on failure.
+- **Recovery Journal** — timestamped observation/action/recovery records.
+- Handler version bumped to **0.3.0**.
+
+Level 3 remains a **foundation**, not a full recovery system. Snapshot restore, richer verification, interactive confirmation, and complete transactional rollback will be expanded before production automatic repair.
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
@@ -646,7 +660,7 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Level 2 — Observation & Discovery Foundation Implemented**
+🚧 **Level 3 — Verification & Safety Foundation Implemented**
 
 Current repository is a **native C++17 / Windows CMD-first** implementation with **PC/System Environment** as the primary target.
 
