@@ -519,6 +519,48 @@ For example:
 
 This ordering is the canonical implementation sequence. Individual low-level tasks may be developed earlier for testing, but production capabilities should follow these dependency levels.
 
+## Level 2 Implementation Notes
+
+Level 2 is intentionally **observation-only**. It discovers and models the environment without installing, removing, linking, or repairing components.
+
+### Error Detection
+- Deterministic pattern matching for missing modules/commands, dependency conflicts, permission failures, and resource conflicts.
+- Confidence-scored observations.
+- No automatic repair yet.
+
+### Component Discovery
+- Windows PATH-based discovery for common developer tools.
+- Default scan covers Python, Node.js, Git, CMake, .NET, Java, Go, and Cargo.
+- Custom tool names can be supplied.
+- Discovery happens before future installation/recovery decisions.
+
+### Existing Component Reuse / Linking Foundation
+- Discovered components are represented with name, kind, path, and execution status.
+- Current stage is observation-only.
+- No unsafe copying or linking is performed.
+
+### Project Environment Awareness
+- Walks upward from the current directory to detect supported project manifests.
+- Recognizes Python, Node.js, Rust, Go, and C/C++ project contexts.
+- PC/System remains the primary scope; project context only refines future decisions.
+
+### Dependency Management Foundation
+- Lightweight manifest inspection for supported ecosystems.
+- Reads requirements.txt, package.json, Cargo.toml, and go.mod.
+- Does not install, upgrade, or remove anything.
+
+### Dependency Graph Foundation
+- Creates deterministic project → declared-dependency edges.
+- Provides the base for later impact analysis.
+- Deeper transitive/runtime impact analysis remains future work.
+
+### Level 2 CLI
+- handler detect-error <error text>
+- handler discover [tool ...]
+- handler project
+- handler deps
+- handler graph
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
@@ -604,20 +646,32 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Early Implementation — Level 1 Foundation in Progress**
+🚧 **Level 2 — Observation & Discovery Foundation Implemented**
 
-The feature set is currently frozen for the first implementation stage. Handler is being built as a **native C++ / Windows CMD-first tool**, with **PC/System Environment** as its primary target.
+Current repository is a **native C++17 / Windows CMD-first** implementation with **PC/System Environment** as the primary target.
 
-Current working foundation:
-- Native C++17 executable structure
-- CMake build configuration
-- PC/system environment inspection
-- Handler self-check
-- Safe `%TEMP%` cleanup
-- Two-hour maintenance loop for TEMP cleanup
-- CLI help/version commands
+Implemented:
+- Native CLI and CMake build
+- PC/system environment observation
+- State store and history
+- Modular command routing
+- Maintenance/idle foundation
+- TEMP cleanup capability
+- Deterministic error-pattern detection
+- Windows PATH component discovery
+- Existing-component observation
+- Project context detection
+- Lightweight dependency manifest inspection
+- Project → dependency graph foundation
 
-Advanced diagnostics, decision rules, component discovery, snapshots, rollback, command formulas, and other planned capabilities will be implemented incrementally on top of this foundation.
+Not yet production-complete:
+- Automatic repair
+- Package installation/removal
+- Transitive dependency resolution
+- Compatibility solving
+- Snapshots/rollback
+- Full verification and permission engine
+- Transactional recovery
 
 ## Roadmap
 
