@@ -41,7 +41,7 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.6.0";
+constexpr const char* kVersion = "0.7.0";
 
 std::filesystem::path stateRoot() {
     const char* localAppData = std::getenv("LOCALAPPDATA");
