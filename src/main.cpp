@@ -7,7 +7,7 @@
 #include "handler/system_info.h"
 #include "handler/temp_cleaner.h"
 
-#include <cstdlib>
+#include <chrono>\n#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -161,11 +161,15 @@ handler::ModuleRegistry buildModules() {
         return 0;
     });
 
-    registry.registerModule("modules", [&registry] {
-        std::cout << "Registered modules (loaded only when selected):\n";
-        for (const auto& name : registry.names()) {
-            std::cout << "  " << name << '\n';
-        }
+    registry.registerModule("modules", [] {
+        std::cout << "Registered modules (activated on demand):\n"
+                  << "  health\n"
+                  << "  self-check\n"
+                  << "  temp-cleanup\n"
+                  << "  maintenance\n"
+                  << "  state\n"
+                  << "  version\n"
+                  << "  modules\n";
         return 0;
     });
 
