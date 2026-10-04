@@ -7,17 +7,41 @@ namespace handler {
 
 std::string quoteArgument(const std::string& value) {
     if (value.empty()) return "\"\"";
+
     bool needsQuotes = false;
-    for (const char ch : value)
-        if (std::isspace(static_cast<unsigned char>(ch)) || ch == '\"') needsQuotes = true;
+    for (const char ch : value) {
+        if (std::isspace(static_cast<unsigned char>(ch)) || ch == '\"') {
+            needsQuotes = true;
+            break;
+        }
+    }
+
     if (!needsQuotes) return value;
 
-    std::string out = "\"";
+    std::string out;
+    out.push_back('\"');
+    std::size_t backslashes = 0;
+
     for (const char ch : value) {
-        if (ch == '\"') out += '\\\\';
-        out += ch;
+        if (ch == '\\\\') {
+            ++backslashes;
+            continue;
+        }
+
+        if (ch == '\"') {
+            out.append(backslashes * 2 + 1, '\\\\');
+            out.push_back('\"');
+            backslashes = 0;
+            continue;
+        }
+
+        out.append(backslashes, '\\\\');
+        backslashes = 0;
+        out.push_back(ch);
     }
-    out += '\"';
+
+    out.append(backslashes * 2, '\\\\');
+    out.push_back('\"');
     return out;
 }
 
@@ -29,7 +53,7 @@ std::string buildCommandLine(const CommandSpec& command) {
 }
 
 bool isAllowedExecutable(const std::string& executable) {
-    return executable == "where" || executable == "cmd" || executable == "cmake"
+    return executable == "where" || executable == "cmake"
         || executable == "git" || executable == "python" || executable == "python.exe"
         || executable == "node" || executable == "node.exe";
 }
