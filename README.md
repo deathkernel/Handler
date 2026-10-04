@@ -442,6 +442,83 @@ Planned behavior:
 
 The cleanup must remain conservative: Handler should not blindly delete files outside the intended TEMP scope.
 
+## Dependency-First Implementation Order
+
+Handler features will be implemented in the following order. This order is **dependency-driven**, not popularity-driven: each stage should provide the foundation required by the next stage.
+
+### Level 1 — Foundation
+
+1. **Native Handler Core / CLI** — process lifecycle, command routing, exit codes, configuration entry point.
+2. **PC/System Target Model** — establish the machine as Handler's primary scope.
+3. **System Environment Observation** — inspect OS, user context, TEMP, PATH, installed locations, processes, and basic system state.
+4. **Environment State Store** — represent and persist the observed PC environment in a structured form.
+5. **Change History / State Tracking** — record meaningful environment changes so later features can compare and reason about state.
+6. **Targeted State Refresh** — refresh only the state affected by an operation instead of rescanning the whole PC.
+7. **Modular On-Demand Execution** — provide the routing mechanism that activates only the capabilities required by a task.
+8. **Lazy Module Loading** — make specialized modules loadable only when required.
+9. **Idle / Sleep State** — allow scheduled/event-driven capabilities to remain inactive between tasks.
+
+### Level 2 — Observation & Discovery
+
+10. **Error Detection** — capture and normalize errors from commands, tools, processes, and environment checks.
+11. **Component Discovery** — discover existing runtimes, tools, SDKs, compilers, packages, and other relevant components.
+12. **Existing Component Reuse / Linking** — determine whether a discovered component can safely satisfy a requirement before installing another copy.
+13. **Project Environment Awareness** — understand project-specific runtime and dependency requirements while keeping PC/System as the primary scope.
+14. **Dependency Management** — model missing, outdated, conflicting, and indirect dependencies.
+15. **Dependency Graph & Impact Analysis** — connect projects, packages, runtimes, and tools and estimate change impact.
+
+### Level 3 — Verification & Safety Foundation
+
+16. **Verification Engine** — independently prove whether an action actually succeeded.
+17. **Permission & Safety Policies** — define Auto, Confirm, and Strict operating modes plus risk-based permissions.
+18. **Snapshots & Last Known Good State** — create restoration points before meaningful changes.
+19. **Transaction-Based Operations** — combine snapshot, action, verification, commit, and failure handling into one safe operation.
+20. **Recovery Journal / Audit Trail** — record observations, decisions, actions, verification, and recovery results.
+
+### Level 4 — Command & Decision System
+
+21. **Command Formula & Generation Engine** — generate environment-specific commands from reusable formulas and validated inputs.
+22. **Action / Command Execution Engine** — execute approved generated commands with controlled permissions and result capture.
+23. **Deterministic Decision Engine** — select actions from observed state, rules, safety policies, and available recovery paths.
+24. **Recovery Strategy Selection** — rank/select the safest viable recovery path instead of blindly trying commands.
+25. **Automatic Error Recovery** — connect detection → decision → protection → command execution → verification.
+26. **Recovery Circuit Breaker** — stop automatic changes when repeated recovery attempts fail or behavior becomes unsafe.
+27. **Rollback & Recovery** — restore snapshots, reverse supported operations, and recover from verified regressions.
+
+### Level 5 — PC Protection & Diagnostics
+
+28. **Environment Health Check** — combine observation and verification into a machine-wide developer-environment health report.
+29. **PATH Guardian** — use the state model, history, snapshots, verification, and safety layer to detect and safely repair PATH problems.
+30. **Environment Variable Protection** — protect configuration using the same state, snapshot, permission, and verification foundations.
+31. **Port & Resource Conflict Detection** — diagnose ports, locked files, processes, and related developer resource conflicts.
+32. **Toolchain Doctor** — combine discovery, diagnostics, decision rules, commands, verification, and recovery to repair developer tooling.
+
+### Level 6 — Maintenance & Advanced Operations
+
+33. **Development Language & Tool Updates** — update runtimes, SDKs, compilers, and developer tools using compatibility checks and recovery protection.
+34. **Risky Command Interception** — apply the safety and decision systems to operations that could affect the wider machine or multiple projects.
+35. **Safe Mode / Isolation** — test or stage risky changes in isolation where practical.
+36. **Scheduled TEMP Cleanup** — use the maintenance/scheduling layer, scope rules, safety checks, execution, and verification to perform periodic %TEMP% cleanup.
+37. **Deep Cleanup** — safely identify and remove genuinely unused development components using dependency and impact analysis.
+38. **Complete Uninstallation** — perform permission-based deep removal using discovery, dependency analysis, safety, transactions, and verification.
+
+### Dependency Rule
+
+A feature should not be considered complete merely because its code exists. Its **required foundation must already be reliable**.
+
+For example:
+
+`Automatic Error Recovery`
+→ requires Error Detection + Component Discovery + Verification + Safety + Snapshots + Command Execution + Decision Rules.
+
+`Deep Cleanup`
+→ requires Dependency Management + Impact Analysis + Discovery + Safety + Snapshots + Verification + Transaction/Recovery support.
+
+`Complete Uninstallation`
+→ requires the same foundations plus stronger permission and rollback safeguards.
+
+This ordering is the canonical implementation sequence. Individual low-level tasks may be developed earlier for testing, but production capabilities should follow these dependency levels.
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
