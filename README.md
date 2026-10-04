@@ -493,6 +493,27 @@ Handler features will be implemented in the following order. This order is **dep
 31. **Port & Resource Conflict Detection** — diagnose ports, locked files, processes, and related developer resource conflicts.
 32. **Toolchain Doctor** — combine discovery, diagnostics, decision rules, commands, verification, and recovery to repair developer tooling.
 
+### Level 7 — Native Execution Hardening
+
+39. **Windows-Native Process Execution** — replace shell-based _popen() execution with controlled CreateProcessW execution, explicit executable resolution, inherited-output pipe handling, and direct process exit-code retrieval.
+40. **Risky Command Execution Boundary** — prevent the command executor from delegating to a generic shell such as cmd.exe; shell syntax must never become an unintended execution escape hatch.
+41. **Windows Argument Quoting Hardening** — use Windows-compatible quoting rules for spaces, quotes, and trailing backslashes so generated argument boundaries remain intact.
+42. **Controlled Process Output Capture** — capture stdout/stderr through explicit inherited handles instead of shell redirection.
+43. **Allowlisted Executable Enforcement** — resolve and execute only explicitly supported developer executables before process creation.
+
+### Level 7 Implementation Notes
+
+Implemented:
+- **Windows-native process execution** now uses CreateProcessW instead of _popen() on Windows.
+- Executables are resolved with SearchPathW before launch.
+- stdout and stderr are captured through a dedicated inherited pipe.
+- Process completion and exit status are obtained directly with GetExitCodeProcess.
+- The generic cmd executable was removed from the allowlist so Handler's command executor cannot intentionally fall back to arbitrary shell syntax.
+- Command argument quoting now handles embedded quotes and trailing backslashes using Windows command-line quoting rules.
+- Non-Windows builds retain the existing portable fallback path; production Handler execution remains Windows-native.
+
+Level 7 is still a hardening foundation. Timeout handling, process-tree containment, job-object isolation, and broader execution-policy enforcement remain later hardening work.
+
 ### Level 6 — Maintenance & Advanced Operations
 
 33. **Development Language & Tool Updates** — update runtimes, SDKs, compilers, and developer tools using compatibility checks and recovery protection.
