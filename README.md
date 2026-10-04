@@ -429,6 +429,19 @@ Record what Handler detected, what decision it made, what commands/actions it pe
 
 The journal should be understandable to developers and useful for debugging Handler itself.
 
+### 🧹 32. Scheduled TEMP Cleanup
+Handler includes a native maintenance capability for Windows temporary files.
+
+Planned behavior:
+- Inspect the current user's `%TEMP%` directory
+- Clean eligible temporary files and directories
+- Skip locked/in-use items instead of forcing deletion
+- Report removed items, skipped items, and recovered space
+- Run the cleanup on a **2-hour maintenance interval** when Handler maintenance mode is active
+- Keep cleanup focused on the TEMP directory rather than performing unrelated system cleanup
+
+The cleanup must remain conservative: Handler should not blindly delete files outside the intended TEMP scope.
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
@@ -514,9 +527,20 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Concept / Planning**
+🚧 **Early Implementation**
 
-The repository currently serves as the specification and planning space for Handler. Implementation will be built after the feature set, safety model, recovery model, and supported environments are defined.
+The feature set is currently frozen for the first implementation stage. Handler is being built as a **native C++ / Windows CMD-first tool**, with **PC/System Environment** as its primary target.
+
+Current working foundation:
+- Native C++17 executable structure
+- CMake build configuration
+- PC/system environment inspection
+- Handler self-check
+- Safe `%TEMP%` cleanup
+- Two-hour maintenance loop for TEMP cleanup
+- CLI help/version commands
+
+Advanced diagnostics, decision rules, component discovery, snapshots, rollback, command formulas, and other planned capabilities will be implemented incrementally on top of this foundation.
 
 ## Roadmap
 
@@ -533,6 +557,12 @@ The repository currently serves as the specification and planning space for Hand
 - Existing component discovery model
 
 ### Phase 1 — Environment Observation
+- Native C++/Windows CLI foundation
+- PC/System target model
+- Basic system environment inspection
+- Handler self-check
+- TEMP cleanup capability
+- Two-hour maintenance mode
 - Detect installed tools/runtimes
 - Inspect project environments
 - Build environment state snapshots
