@@ -575,6 +575,21 @@ Implemented:
 
 Level 3 remains a **foundation**, not a full recovery system. Snapshot restore, richer verification, interactive confirmation, and complete transactional rollback will be expanded before production automatic repair.
 
+## Level 4 Implementation Notes
+
+Level 4 adds the deterministic command and recovery decision foundation.
+
+Implemented:
+- **Command Formula & Generation Engine** — structured command specs, safe argument quoting, and an allowlisted executable set.
+- **Action / Command Execution Engine** — executes only allowlisted commands and captures output/exit status.
+- **Deterministic Decision Engine** — maps detected error categories to bounded next-step decisions.
+- **Recovery Strategy Selection** — ranks safe recovery directions before execution.
+- **Automatic Error Recovery Foundation** — recovery permission is evaluated through the Level 3 safety policy.
+- **Recovery Circuit Breaker** — stops repeated recovery attempts after a configurable failure limit.
+- Handler version bumped to **0.4.0**.
+
+Level 4 is intentionally conservative: it does not silently install packages, modify PATH, kill processes, or perform destructive repairs. Those actions require later policy-backed capabilities and stronger verification.
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
@@ -660,7 +675,7 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Level 3 — Verification & Safety Foundation Implemented**
+🚧 **Level 4 — Command & Decision Foundation Implemented**
 
 Current repository is a **native C++17 / Windows CMD-first** implementation with **PC/System Environment** as the primary target.
 
