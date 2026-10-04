@@ -1,34 +1,72 @@
+#include "handler/environment_state.h"
+#include "handler/history.h"
+#include "handler/maintenance.h"
+#include "handler/module.h"
+#include "handler/router.h"
+#include "handler/state_store.h"
 #include "handler/system_info.h"
 #include "handler/temp_cleaner.h"
 
-#include <chrono>
 #include <cstdlib>
-#include <ctime>
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <thread>
 
 namespace {
 
-constexpr int kVersionMajor = 0;
-constexpr int kVersionMinor = 1;
-constexpr int kVersionPatch = 0;
-constexpr auto kMaintenanceInterval = std::chrono::hours(2);
+constexpr const char* kVersion = "0.1.0";
+
+std::filesystem::path stateRoot() {
+    const char* localAppData = std::getenv("LOCALAPPDATA");
+    if (localAppData && *localAppData) {
+        return std::filesystem::path(localAppData) / "Handler";
+    }
+
+    const char* userProfile = std::getenv("USERPROFILE");
+    if (userProfile && *userProfile) {
+        return std::filesystem::path(userProfile) / ".handler";
+    }
+
+    return std::filesystem::current_path() / ".handler";
+}
 
 void printUsage() {
     std::cout
         << "Handler - Developer Environment Guardian\n\n"
         << "Usage:\n"
         << "  handler health             Inspect PC/system environment\n"
-        << "  handler self-check         Run Handler's own basic checks\n"
+        << "  handler self-check         Run Handler's own checks\n"
         << "  handler temp-cleanup       Safely clean %TEMP%\n"
-        << "  handler maintenance        Run TEMP cleanup every 2 hours\n"
+        << "  handler maintenance        Run maintenance every 2 hours\n"
+        << "  handler state              Capture/show current environment state\n"
+        << "  handler modules            Show registered on-demand modules\n"
         << "  handler version            Show Handler version\n"
         << "  handler help               Show this help\n";
 }
 
-bool runSelfCheck() {
+handler::StateStore makeStateStore() {
+    return handler::StateStore(stateRoot() / "state");
+}
+
+handler::History makeHistory() {
+    return handler::History(stateRoot() / "history.log");
+}
+
+int runHealth() {
+    const auto health = handler::inspectSystem();
+    handler::printSystemHealth(health);
+
+    auto store = makeStateStore();
+    const auto state = handler::captureEnvironmentState();
+    if (!store.saveCurrent(state)) {
+        std::cerr << "[WARN] Could not persist environment state.\n";
+    }
+
+    makeHistory().record("HEALTH_CHECK", "system observation completed");
+    return 0;
+}
+
+int runSelfCheck() {
     const auto health = handler::inspectSystem();
     bool ok = true;
 
@@ -48,15 +86,27 @@ bool runSelfCheck() {
         std::cout << "[WARN] PATH environment variable is missing\n";
     }
 
-    std::cout << (ok ? "\nSelf-check passed.\n" : "\nSelf-check found a required problem.\n");
-    return ok;
+    const auto state = handler::captureEnvironmentState();
+    if (makeStateStore().saveCurrent(state)) {
+        std::cout << "[OK] Environment state store\n";
+    } else {
+        std::cout << "[FAIL] Environment state store\n";
+        ok = false;
+    }
+
+    makeHistory().record("SELF_CHECK", ok ? "passed" : "failed");
+
+    std::cout << (ok ? "\nSelf-check passed.\n"
+                     : "\nSelf-check found a required problem.\n");
+    return ok ? 0 : 1;
 }
 
-bool runTempCleanup() {
+int runTempCleanup() {
     const auto health = handler::inspectSystem();
     if (!health.tempAvailable) {
         std::cerr << "Handler: TEMP is not available. Cleanup skipped.\n";
-        return false;
+        makeHistory().record("TEMP_CLEANUP_SKIPPED", "TEMP unavailable");
+        return 1;
     }
 
     std::cout << "Cleaning: " << health.tempPath << '\n';
@@ -64,64 +114,82 @@ bool runTempCleanup() {
         std::filesystem::path(health.tempPath));
 
     handler::printCleanupResult(result);
-    return true;
+    makeHistory().record("TEMP_CLEANUP",
+        "files=" + std::to_string(result.filesRemoved) +
+        ", skipped=" + std::to_string(result.skipped));
+
+    return 0;
 }
 
-void runMaintenanceLoop() {
-    std::cout << "Handler maintenance mode started.\n";
-    std::cout << "TEMP cleanup interval: 2 hours.\n";
-    std::cout << "Press Ctrl+C to stop.\n\n";
+int runState() {
+    const auto state = handler::captureEnvironmentState();
+    std::cout << handler::formatState(state);
 
-    while (true) {
-        const auto now = std::chrono::system_clock::to_time_t(
-            std::chrono::system_clock::now());
-        std::cout << "Maintenance check: " << std::ctime(&now);
-        runTempCleanup();
-        std::cout << "Next cleanup in 2 hours.\n\n";
-        std::this_thread::sleep_for(kMaintenanceInterval);
+    if (!makeStateStore().saveCurrent(state)) {
+        std::cerr << "Handler: failed to persist environment state.\n";
+        return 1;
     }
+
+    makeHistory().record("STATE_CAPTURED", "current environment state saved");
+    return 0;
+}
+
+int runMaintenance() {
+    handler::MaintenanceLoop loop(std::chrono::hours(2));
+    loop.run([] {
+        runTempCleanup();
+        runState();
+    });
+    return 0;
+}
+
+handler::ModuleRegistry buildModules() {
+    handler::ModuleRegistry registry;
+
+    registry.registerModule("help", [] {
+        printUsage();
+        return 0;
+    });
+
+    registry.registerModule("health", runHealth);
+    registry.registerModule("self-check", runSelfCheck);
+    registry.registerModule("temp-cleanup", runTempCleanup);
+    registry.registerModule("maintenance", runMaintenance);
+    registry.registerModule("state", runState);
+    registry.registerModule("version", [] {
+        std::cout << "Handler " << kVersion << '\n';
+        return 0;
+    });
+
+    registry.registerModule("modules", [&registry] {
+        std::cout << "Registered modules (loaded only when selected):\n";
+        for (const auto& name : registry.names()) {
+            std::cout << "  " << name << '\n';
+        }
+        return 0;
+    });
+
+    return registry;
 }
 
 } // namespace
 
 int main(int argc, char* argv[]) {
+    auto registry = buildModules();
+    handler::TaskRouter router(registry);
+
     if (argc < 2) {
-        printUsage();
-        return 0;
+        return router.dispatch("help");
     }
 
     const std::string command = argv[1];
+    const int result = router.dispatch(command);
 
-    if (command == "health") {
-        handler::printSystemHealth(handler::inspectSystem());
-        return 0;
-    }
-
-    if (command == "self-check") {
-        return runSelfCheck() ? 0 : 1;
-    }
-
-    if (command == "temp-cleanup") {
-        return runTempCleanup() ? 0 : 1;
-    }
-
-    if (command == "maintenance") {
-        runMaintenanceLoop();
-        return 0;
-    }
-
-    if (command == "version") {
-        std::cout << "Handler " << kVersionMajor << '.'
-                  << kVersionMinor << '.' << kVersionPatch << '\n';
-        return 0;
-    }
-
-    if (command == "help" || command == "--help" || command == "-h") {
+    if (result == 127) {
+        std::cerr << "Unknown Handler command: " << command << "\n\n";
         printUsage();
-        return 0;
+        return 2;
     }
 
-    std::cerr << "Unknown command: " << command << "\n\n";
-    printUsage();
-    return 2;
+    return result;
 }
