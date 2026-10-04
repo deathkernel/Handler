@@ -4,7 +4,7 @@
 
 Handler is a planned developer tool designed to protect a developer's coding environment from problems caused by dependency conflicts, missing tools, broken configurations, failed updates, incomplete installations, and other development-environment failures.
 
-Handler is **not an AI assistant**. Its core intelligence is a deterministic decision-making system built from rules, diagnostics, environment state, known error patterns, recovery strategies, safety policies, and command execution.
+Handler is **not an AI assistant**. Its core intelligence is a deterministic decision-making system built from rules, diagnostics, environment state, known error patterns, recovery strategies, safety policies, command generation, and command execution.
 
 ## Vision
 
@@ -12,7 +12,7 @@ Development work should not put the developer's machine at unnecessary risk.
 
 Handler aims to follow a simple lifecycle:
 
-**Prevent → Detect → Diagnose → Decide → Protect → Execute → Verify → Recover**
+**Prevent → Detect → Diagnose → Decide → Protect → Generate → Execute → Verify → Recover**
 
 When a problem can be safely repaired, Handler should perform the required commands itself. When an operation is potentially destructive or system-impacting, Handler should protect the environment, explain the planned action, and request permission where required.
 
@@ -62,6 +62,8 @@ Check active Python environment
         ↓
 Create recovery point
         ↓
+Generate package-install command
+        ↓
 python -m pip install pandas
         ↓
 Verify: import pandas
@@ -69,7 +71,49 @@ Verify: import pandas
 ✓ Recovery successful
 ```
 
-### 📦 4. Dependency Management
+### 🧩 4. Command Formula & Generation Engine
+Handler should not require a giant hardcoded list of complete commands.
+
+Instead, reusable actions should define:
+- Command templates/formulas
+- Required inputs
+- Environment variables
+- Conditions
+- Risk level
+- Validation requirements
+- Verification steps
+- Rollback strategy
+
+Example:
+
+```text
+Action:
+INSTALL_PYTHON_PACKAGE
+
+Inputs:
+PYTHON_EXECUTABLE
+PACKAGE_NAME
+
+Formula:
+PYTHON_EXECUTABLE + " -m pip install " + PACKAGE_NAME
+```
+
+Given:
+
+```text
+PYTHON_EXECUTABLE = C:\Project\.venv\Scripts\python.exe
+PACKAGE_NAME = pandas
+```
+
+Handler generates the environment-specific command:
+
+```text
+C:\Project\.venv\Scripts\python.exe -m pip install pandas
+```
+
+The generated command must pass validation and safety checks before execution.
+
+### 📦 5. Dependency Management
 - Detect missing dependencies
 - Detect outdated dependencies
 - Detect version conflicts
@@ -78,7 +122,48 @@ Verify: import pandas
 - Repair broken project environments
 - Prevent unsafe dependency removal
 
-### 💻 5. Development Language & Tool Updates
+### 🔗 6. Existing Component Discovery & Linking
+If a required library, tool, runtime, SDK, compiler, or other component already exists on the machine, Handler should **discover it before installing another copy**.
+
+Example:
+
+```text
+Project reports:
+ModuleNotFoundError: pandas
+
+        ↓
+
+Search relevant environments
+
+        ↓
+
+pandas found in another environment
+
+        ↓
+
+Check:
+• Version compatibility
+• Target environment
+• Isolation rules
+• Dependency requirements
+• Whether safe reuse/linking is possible
+
+        ↓
+
+If safe:
+Connect/configure existing component
+
+If not safe:
+Install or provision a compatible component
+```
+
+Handler should never bypass intentional environment isolation simply to avoid an installation. For example, a package installed in a different Python environment should not automatically be copied or exposed to a virtual environment unless the target configuration explicitly supports safe reuse.
+
+The principle is:
+
+**Discover first → determine safe reuse → install only when necessary.**
+
+### 💻 7. Development Language & Tool Updates
 Detect installed development languages, runtimes, SDKs, compilers, and developer tools that have updates available.
 
 Planned support may include:
@@ -93,7 +178,7 @@ Planned support may include:
 
 Major or potentially breaking updates should not be treated the same as ordinary maintenance updates.
 
-### 🛡️ 6. Environment Protection
+### 🛡️ 8. Environment Protection
 Monitor important development-environment state, including:
 - PATH
 - Environment variables
@@ -106,14 +191,14 @@ Monitor important development-environment state, including:
 
 Handler should detect unexpected or risky changes and protect against avoidable damage.
 
-### 💾 7. Snapshots & Known-Good State
+### 💾 9. Snapshots & Known-Good State
 Create recovery points before meaningful or risky operations.
 
 A snapshot may capture the environment state required to reproduce or restore a working configuration.
 
 Handler should maintain a **Last Known Good State** whenever possible.
 
-### 🔄 8. Rollback & Recovery
+### 🔄 10. Rollback & Recovery
 When an update, installation, cleanup, or repair causes a verified regression, Handler can roll back the affected changes when a safe restoration path exists.
 
 Planned capabilities:
@@ -124,7 +209,7 @@ Planned capabilities:
 - Configuration restoration
 - Interrupted-recovery recovery
 
-### 🧪 9. Verification Engine
+### 🧪 11. Verification Engine
 A change is not considered successful merely because a command returned successfully.
 
 Handler should verify outcomes using appropriate checks:
@@ -135,7 +220,7 @@ Handler should verify outcomes using appropriate checks:
 - Tool availability checks
 - Environment integrity checks
 
-### ⚡ 10. Modular On-Demand Execution
+### ⚡ 12. Modular On-Demand Execution
 Handler should **not run its entire system continuously**. Only the components required for the current task, event, project, or recovery operation should be activated.
 
 Examples:
@@ -147,6 +232,8 @@ Activate:
 Error Parser
 Dependency Resolver
 Python Environment Manager
+Command Formula Engine
+Command Validator
 Command Executor
 Verification
         ↓
@@ -162,7 +249,7 @@ This reduces:
 
 Handler should also avoid refreshing or rescanning everything after every change.
 
-### 🔄 11. Targeted Refresh
+### 🔄 13. Targeted Refresh
 When something changes, Handler should refresh **only the affected component/state**.
 
 Examples:
@@ -184,17 +271,17 @@ Project A changed
 
 A full environment scan should be reserved for explicit requests, startup/initial discovery, recovery situations, or cases where targeted state is no longer trustworthy.
 
-### 🧩 12. Lazy Module Loading
+### 🧩 14. Lazy Module Loading
 Handler components should be loaded only when needed.
 
 The core process should remain lightweight while specialized modules remain dormant until their capabilities are required.
 
-### 💤 13. Idle / Sleep State
+### 💤 15. Idle / Sleep State
 When no relevant work is happening, Handler should enter a low-activity state rather than continuously executing diagnostics.
 
 It should wake when a relevant event, scheduled check, developer action, or recovery workflow requires it.
 
-### 🧹 14. Deep Cleanup
+### 🧹 16. Deep Cleanup
 Find development components that appear unnecessary and, **with user permission**, remove them completely where it is safe to do so.
 
 Potential cleanup targets:
@@ -218,7 +305,7 @@ Before deep removal, Handler should check whether a component is:
 - Globally configured
 - Safe to remove
 
-### 🗑️ 15. Complete Uninstallation
+### 🗑️ 17. Complete Uninstallation
 For supported software and development components, Handler should be able to perform a permission-based deep uninstall rather than removing only the visible application.
 
 Where appropriate, this can include:
@@ -232,7 +319,7 @@ Where appropriate, this can include:
 
 System-level deletion should require stronger safeguards and explicit permission.
 
-### 🚧 16. Risky Command Interception
+### 🚧 18. Risky Command Interception
 Identify operations that could affect multiple projects or the wider machine.
 
 Examples:
@@ -245,10 +332,10 @@ Examples:
 
 Handler can block, isolate, or request confirmation based on configured policy.
 
-### 🧪 17. Safe Mode / Isolation
+### 🧪 19. Safe Mode / Isolation
 Test risky changes in an isolated environment before applying them to the primary environment when practical.
 
-### 🏥 18. Environment Health Check
+### 🏥 20. Environment Health Check
 Provide a diagnostic scan of the developer environment.
 
 Example:
@@ -265,19 +352,19 @@ Configuration ⚠
 Recovery      ✓
 ```
 
-### 🔌 19. Toolchain Doctor
+### 🔌 21. Toolchain Doctor
 Detect and repair broken developer tooling such as runtimes, compilers, package managers, and command-line tools.
 
-### 🛣️ 20. PATH Guardian
+### 🛣️ 22. PATH Guardian
 Track PATH changes, detect missing or suspicious entries, and restore valid configuration when a safe recovery point exists.
 
-### 🔐 21. Environment Variable Protection
+### 🔐 23. Environment Variable Protection
 Detect missing or unexpectedly changed environment variables while keeping secrets protected from plaintext logs and snapshots.
 
-### 🚦 22. Port & Resource Conflict Detection
+### 🚦 24. Port & Resource Conflict Detection
 Identify common development conflicts such as occupied ports, locked files, and conflicting running services/processes.
 
-### 📊 23. Environment & Change History
+### 📊 25. Environment & Change History
 Keep a clear timeline of meaningful Handler actions:
 
 ```text
@@ -290,7 +377,7 @@ Keep a clear timeline of meaningful Handler actions:
 18:49  Environment restored
 ```
 
-### 📦 24. Project Environment Awareness
+### 📦 26. Project Environment Awareness
 Understand that different projects can require different language/runtime versions.
 
 Example:
@@ -303,13 +390,13 @@ Project C → Python 3.14
 
 Global changes should consider their potential impact on all known projects.
 
-### 🌳 25. Dependency Graph & Impact Analysis
+### 🌳 27. Dependency Graph & Impact Analysis
 Show relationships between projects, packages, runtimes, and tools and estimate what could break before making a change.
 
-### 🧯 26. Recovery Circuit Breaker
+### 🧯 28. Recovery Circuit Breaker
 If repeated recovery attempts are failing or changes are producing unexpected results, Handler should stop further automatic modifications and preserve the current state for investigation or rollback.
 
-### 🔒 27. Permission & Safety Policies
+### 🔒 29. Permission & Safety Policies
 Configurable operating modes:
 
 - **Auto** — execute only pre-approved low-risk repairs
@@ -318,7 +405,7 @@ Configurable operating modes:
 
 Safety levels should be based on actual impact, not just the command name.
 
-### 🔁 28. Transaction-Based Operations
+### 🔁 30. Transaction-Based Operations
 Treat multi-step changes as transactions:
 
 ```text
@@ -337,7 +424,7 @@ Failure
 ROLLBACK
 ```
 
-### 📝 29. Recovery Journal
+### 📝 31. Recovery Journal
 Record what Handler detected, what decision it made, what commands/actions it performed, and whether verification succeeded.
 
 The journal should be understandable to developers and useful for debugging Handler itself.
@@ -354,6 +441,12 @@ For example, an npm dependency problem should not activate Python diagnostics, J
 
 The goal is a **lightweight core with specialized capabilities activated on demand**.
 
+### Command Generation Performance
+
+Command formulas and action definitions should remain available as lightweight definitions, while expensive resolvers and specialized command-generation logic should be loaded only when the relevant action is selected.
+
+Handler should not generate, validate, or resolve commands that are unrelated to the current operation.
+
 ## Design Principles
 
 1. **Deterministic over opaque** — decisions should come from explicit rules and observable state.
@@ -369,6 +462,8 @@ The goal is a **lightweight core with specialized capabilities activated on dema
 11. **On-demand execution** — do not run components that are irrelevant to the current task.
 12. **Targeted refresh** — update only the state affected by a change unless a full rescan is required.
 13. **Low overhead** — Handler should minimize CPU, memory, disk, and background activity.
+14. **Reuse before reinstall** — discover existing compatible components before creating unnecessary duplicates.
+15. **Never break intentional isolation** — safe reuse must respect project and environment boundaries.
 
 ## Planned Architecture
 
@@ -387,6 +482,10 @@ Handler is expected to evolve around these logical components:
       Diagnostics Engine
              ↓
        Decision Engine
+             ↓
+   Component Discovery Engine
+             ↓
+   Command Formula Engine
              ↓
    Safety & Permission Layer
              ↓
@@ -430,6 +529,8 @@ The repository currently serves as the specification and planning space for Hand
 - Environment state model
 - Modular execution model
 - Targeted refresh model
+- Command formula model
+- Existing component discovery model
 
 ### Phase 1 — Environment Observation
 - Detect installed tools/runtimes
@@ -438,6 +539,7 @@ The repository currently serves as the specification and planning space for Hand
 - Track changes
 - On-demand discovery
 - Targeted state refresh
+- Existing component discovery
 
 ### Phase 2 — Diagnostics
 - Error parsing
@@ -445,9 +547,11 @@ The repository currently serves as the specification and planning space for Hand
 - Environment health checks
 - Toolchain diagnostics
 - Resource conflict detection
+- Component availability and compatibility analysis
 
 ### Phase 3 — Safe Recovery
 - Deterministic rules
+- Command formula generation
 - Action execution
 - Verification
 - Snapshots
@@ -459,6 +563,7 @@ The repository currently serves as the specification and planning space for Hand
 - Deep cleanup
 - Complete uninstallation
 - Project-aware dependency maintenance
+- Safe component reuse
 
 ### Phase 5 — Performance & Hardening
 - Modular/lazy execution
