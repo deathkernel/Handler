@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Handler VERSION 0.2.0 LANGUAGES CXX)
+project(Handler VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,6 +20,11 @@ add_executable(handler
     src/project_context.cpp
     src/dependency_manager.cpp
     src/dependency_graph.cpp
+    src/verification.cpp
+    src/policy.cpp
+    src/snapshot.cpp
+    src/transaction.cpp
+    src/recovery_journal.cpp
 )
 
 target_include_directories(handler PRIVATE include)
