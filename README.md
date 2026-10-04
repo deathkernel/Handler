@@ -604,7 +604,7 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Early Implementation**
+🚧 **Early Implementation — Level 1 Foundation in Progress**
 
 The feature set is currently frozen for the first implementation stage. Handler is being built as a **native C++ / Windows CMD-first tool**, with **PC/System Environment** as its primary target.
 
@@ -637,6 +637,10 @@ Advanced diagnostics, decision rules, component discovery, snapshots, rollback, 
 - Native C++/Windows CLI foundation
 - PC/System target model
 - Basic system environment inspection
+- Environment state store
+- Change history
+- Task routing / on-demand module registry
+- Maintenance idle loop
 - Handler self-check
 - TEMP cleanup capability
 - Two-hour maintenance mode
