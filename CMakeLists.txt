@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(handler
     src/main.cpp
     src/system_info.cpp
-    src/temp_cleaner.cpp
+    src/temp_cleaner.cpp\n    src/environment_state.cpp\n    src/state_store.cpp\n    src/history.cpp\n    src/module.cpp\n    src/router.cpp\n    src/maintenance.cpp
 )
 
 target_include_directories(handler PRIVATE include)
