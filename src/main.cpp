@@ -1,3 +1,8 @@
+#include "handler/environment_health.h"
+#include "handler/path_guardian.h"
+#include "handler/environment_guardian.h"
+#include "handler/resource_guardian.h"
+#include "handler/toolchain_doctor.h"
 #include "handler/action_engine.h"
 #include "handler/circuit_breaker.h"
 #include "handler/decision_engine.h"
@@ -31,7 +36,7 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.4.0";
+constexpr const char* kVersion = "0.5.0";
 
 std::filesystem::path stateRoot() {
     const char* localAppData = std::getenv("LOCALAPPDATA");
@@ -41,7 +46,7 @@ std::filesystem::path stateRoot() {
     return std::filesystem::current_path() / ".handler";
 }
 
-void printDecisions(const std::vector<handler::Decision>& decisions) { for (const auto& d : decisions) std::cout << d.action << " | risk=" << static_cast<int>(d.risk) << " | " << d.reason << "\n"; }\n\nint runDecide(const std::string& text) { const auto errors = handler::detectErrors(text); const auto decisions = handler::decideRepairs(errors); printDecisions(decisions); makeHistory().record("DECISION", "actions=" + std::to_string(decisions.size())); return decisions.empty() ? 0 : 1; }\n\nint runCommand(const std::string& executable, const std::vector<std::string>& args) { handler::CommandSpec spec{"cli-command", executable, args, handler::RiskLevel::Medium}; std::cout << handler::buildCommandLine(spec) << "\n"; const auto policy = handler::evaluatePolicy(handler::SafetyMode::Confirm, spec.risk); if (!policy.allowed) { std::cout << "Command blocked: " << policy.reason << "\n"; return 3; } const auto result = handler::executeCommand(spec); std::cout << result.output; return result.started ? result.exitCode : 1; }\n\nvoid printUsage() {
+int runProtection() { handler::printEnvironmentHealth(handler::inspectEnvironmentHealth()); for (const auto& f : handler::inspectPathEntries()) std::cout << "[" << (f.exists ? "OK" : "WARN") << "] PATH " << f.entry << ": " << f.details << "\n"; const auto vars = handler::inspectEnvironmentVariables({"TEMP","PATH","USERPROFILE","LOCALAPPDATA"}); for (const auto& v : vars) std::cout << "[" << (v.present ? "OK" : "WARN") << "] ENV " << v.name << ": " << v.details << "\n"; const auto ports = handler::inspectPorts({3000,5000,8000,8080}); for (const auto& p : ports) std::cout << "[" << (p.available ? "OK" : "BUSY") << "] PORT " << p.port << ": " << p.details << "\n"; const auto tools = handler::inspectToolchain({"python","git","node","cmake","dotnet"}); for (const auto& t : tools) std::cout << "[" << (t.available ? "OK" : "WARN") << "] TOOL " << t.tool << ": " << t.details << "\n"; makeHistory().record("PROTECTION_CHECK","environment/path/variables/ports/toolchain inspected"); return 0; }\n\nvoid printDecisions(const std::vector<handler::Decision>& decisions) { for (const auto& d : decisions) std::cout << d.action << " | risk=" << static_cast<int>(d.risk) << " | " << d.reason << "\n"; }\n\nint runDecide(const std::string& text) { const auto errors = handler::detectErrors(text); const auto decisions = handler::decideRepairs(errors); printDecisions(decisions); makeHistory().record("DECISION", "actions=" + std::to_string(decisions.size())); return decisions.empty() ? 0 : 1; }\n\nint runCommand(const std::string& executable, const std::vector<std::string>& args) { handler::CommandSpec spec{"cli-command", executable, args, handler::RiskLevel::Medium}; std::cout << handler::buildCommandLine(spec) << "\n"; const auto policy = handler::evaluatePolicy(handler::SafetyMode::Confirm, spec.risk); if (!policy.allowed) { std::cout << "Command blocked: " << policy.reason << "\n"; return 3; } const auto result = handler::executeCommand(spec); std::cout << result.output; return result.started ? result.exitCode : 1; }\n\nvoid printUsage() {
     std::cout
         << "Handler - Developer Environment Guardian\n\n"
         << "Usage:\n"
@@ -56,7 +61,7 @@ void printDecisions(const std::vector<handler::Decision>& decisions) { for (cons
         << "  handler deps                   Inspect project dependencies\n"
         << "  handler graph                  Show discovered dependency edges\n"
         << "  handler decide <error text>    Generate deterministic repair decisions\n"
-        << "  handler command <tool> [...]   Execute an allowlisted command\n"
+        << "  handler command <tool> [...]   Execute an allowlisted command\n        << "  handler protect                 Run Level 5 PC protection diagnostics\n"
         << "  handler modules                Show registered on-demand modules\n"
         << "  handler version                Show Handler version\n"
         << "  handler help                   Show this help\n";
@@ -202,7 +207,7 @@ int main(int argc, char* argv[]) {
 
     const std::string command = argv[1];
 
-    if (command == "decide") { if (argc < 3) { std::cerr << "Usage: handler decide <error text>\n"; return 2; } return runDecide(argv[2]); }\n\n    if (command == "command") { if (argc < 3) { std::cerr << "Usage: handler command <tool> [args...]\n"; return 2; } std::vector<std::string> args; for (int i = 3; i < argc; ++i) args.emplace_back(argv[i]); return runCommand(argv[2], args); }\n\n    if (command == "detect-error") {
+    if (command == "protect") return runProtection();\n\n    if (command == "decide") { if (argc < 3) { std::cerr << "Usage: handler decide <error text>\n"; return 2; } return runDecide(argv[2]); }\n\n    if (command == "command") { if (argc < 3) { std::cerr << "Usage: handler command <tool> [args...]\n"; return 2; } std::vector<std::string> args; for (int i = 3; i < argc; ++i) args.emplace_back(argv[i]); return runCommand(argv[2], args); }\n\n    if (command == "detect-error") {
         if (argc < 3) {
             std::cerr << "Usage: handler detect-error <error text>\n";
             return 2;
