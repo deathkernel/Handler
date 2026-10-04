@@ -605,6 +605,22 @@ Implemented:
 
 Level 5 remains observation-first: it reports risks and conflicts but does not silently modify PATH/environment variables, terminate processes, or change system configuration.
 
+## Level 6 Implementation Notes
+
+Level 6 adds maintenance and advanced-operation foundations.
+
+Implemented:
+- **Development Language & Tool Updates** — discovers installed tool locations and produces update-review candidates.
+- **Risky Command Interception** — classifies destructive/system-changing command patterns as Safe, Review, or Blocked.
+- **Safe Mode / Isolation** — creates a Handler sandbox context and validates paths against it.
+- **Deep Cleanup Foundation** — scoped cleanup primitive with an explicit backup gate.
+- **Complete Uninstallation Foundation** — validates uninstall targets and rejects filesystem roots.
+- Existing scheduled TEMP cleanup remains part of the maintenance layer.
+- New commands: `handler updates`, `handler risk <command>`, `handler safe-mode`.
+- Handler version bumped to **0.6.0**.
+
+Level 6 is intentionally conservative. Update discovery does not silently upgrade software, risky-command detection does not execute or rewrite commands, deep cleanup is scoped, and uninstallation requires explicit confirmation. Production-grade backup/restore and full Windows installer/package-manager integration remain hardening work.
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
@@ -690,7 +706,7 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Level 5 — PC Protection & Diagnostics Implemented**
+🚧 **Level 6 — Maintenance & Advanced Operations Foundation Implemented**
 
 Current repository is a **native C++17 / Windows CMD-first** implementation with **PC/System Environment** as the primary target.
 
