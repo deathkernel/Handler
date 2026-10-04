@@ -1,3 +1,7 @@
+#include "handler/action_engine.h"
+#include "handler/circuit_breaker.h"
+#include "handler/decision_engine.h"
+#include "handler/recovery.h"
 #include "handler/component_discovery.h"
 #include "handler/dependency_graph.h"
 #include "handler/dependency_manager.h"
@@ -27,7 +31,7 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.3.0";
+constexpr const char* kVersion = "0.4.0";
 
 std::filesystem::path stateRoot() {
     const char* localAppData = std::getenv("LOCALAPPDATA");
@@ -37,7 +41,7 @@ std::filesystem::path stateRoot() {
     return std::filesystem::current_path() / ".handler";
 }
 
-void printUsage() {
+void printDecisions(const std::vector<handler::Decision>& decisions) { for (const auto& d : decisions) std::cout << d.action << " | risk=" << static_cast<int>(d.risk) << " | " << d.reason << "\n"; }\n\nint runDecide(const std::string& text) { const auto errors = handler::detectErrors(text); const auto decisions = handler::decideRepairs(errors); printDecisions(decisions); makeHistory().record("DECISION", "actions=" + std::to_string(decisions.size())); return decisions.empty() ? 0 : 1; }\n\nint runCommand(const std::string& executable, const std::vector<std::string>& args) { handler::CommandSpec spec{"cli-command", executable, args, handler::RiskLevel::Medium}; std::cout << handler::buildCommandLine(spec) << "\n"; const auto policy = handler::evaluatePolicy(handler::SafetyMode::Confirm, spec.risk); if (!policy.allowed) { std::cout << "Command blocked: " << policy.reason << "\n"; return 3; } const auto result = handler::executeCommand(spec); std::cout << result.output; return result.started ? result.exitCode : 1; }\n\nvoid printUsage() {
     std::cout
         << "Handler - Developer Environment Guardian\n\n"
         << "Usage:\n"
@@ -51,6 +55,8 @@ void printUsage() {
         << "  handler project                Detect project context\n"
         << "  handler deps                   Inspect project dependencies\n"
         << "  handler graph                  Show discovered dependency edges\n"
+        << "  handler decide <error text>    Generate deterministic repair decisions\n"
+        << "  handler command <tool> [...]   Execute an allowlisted command\n"
         << "  handler modules                Show registered on-demand modules\n"
         << "  handler version                Show Handler version\n"
         << "  handler help                   Show this help\n";
@@ -196,7 +202,7 @@ int main(int argc, char* argv[]) {
 
     const std::string command = argv[1];
 
-    if (command == "detect-error") {
+    if (command == "decide") { if (argc < 3) { std::cerr << "Usage: handler decide <error text>\n"; return 2; } return runDecide(argv[2]); }\n\n    if (command == "command") { if (argc < 3) { std::cerr << "Usage: handler command <tool> [args...]\n"; return 2; } std::vector<std::string> args; for (int i = 3; i < argc; ++i) args.emplace_back(argv[i]); return runCommand(argv[2], args); }\n\n    if (command == "detect-error") {
         if (argc < 3) {
             std::cerr << "Usage: handler detect-error <error text>\n";
             return 2;
