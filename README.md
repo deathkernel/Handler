@@ -590,6 +590,21 @@ Implemented:
 
 Level 4 is intentionally conservative: it does not silently install packages, modify PATH, kill processes, or perform destructive repairs. Those actions require later policy-backed capabilities and stronger verification.
 
+## Level 5 Implementation Notes
+
+Level 5 adds PC protection and diagnostics on top of the Level 4 decision system.
+
+Implemented:
+- **Environment Health Check** — validates key environment areas.
+- **PATH Guardian** — detects PATH entries that no longer resolve to directories.
+- **Environment Variable Protection** — observes important variables without modifying them.
+- **Port & Resource Conflict Detection** — probes common development ports.
+- **Toolchain Doctor** — checks availability of common development tools through component discovery.
+- New diagnostic command: `handler protect`.
+- Handler version bumped to **0.5.0**.
+
+Level 5 remains observation-first: it reports risks and conflicts but does not silently modify PATH/environment variables, terminate processes, or change system configuration.
+
 ## Performance Model
 
 Handler should be designed around **minimum necessary execution**.
@@ -675,7 +690,7 @@ It is not intended to replace:
 
 ## Project Status
 
-🚧 **Level 4 — Command & Decision Foundation Implemented**
+🚧 **Level 5 — PC Protection & Diagnostics Implemented**
 
 Current repository is a **native C++17 / Windows CMD-first** implementation with **PC/System Environment** as the primary target.
 
