@@ -61,7 +61,8 @@ int runProtection() { handler::printEnvironmentHealth(handler::inspectEnvironmen
         << "  handler deps                   Inspect project dependencies\n"
         << "  handler graph                  Show discovered dependency edges\n"
         << "  handler decide <error text>    Generate deterministic repair decisions\n"
-        << "  handler command <tool> [...]   Execute an allowlisted command\n        << "  handler protect                 Run Level 5 PC protection diagnostics\n"
+        << "  handler command <tool> [...]   Execute an allowlisted command\n"
+        << "  handler protect                 Run Level 5 PC protection diagnostics\n"
         << "  handler modules                Show registered on-demand modules\n"
         << "  handler version                Show Handler version\n"
         << "  handler help                   Show this help\n";
