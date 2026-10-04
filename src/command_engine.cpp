@@ -6,18 +6,18 @@
 namespace handler {
 
 std::string quoteArgument(const std::string& value) {
-    if (value.empty()) return """";
+    if (value.empty()) return "\"\"";
     bool needsQuotes = false;
     for (const char ch : value)
-        if (std::isspace(static_cast<unsigned char>(ch)) || ch == '"') needsQuotes = true;
+        if (std::isspace(static_cast<unsigned char>(ch)) || ch == '\"') needsQuotes = true;
     if (!needsQuotes) return value;
 
-    std::string out = """;
+    std::string out = "\"";
     for (const char ch : value) {
-        if (ch == '"') out += '\\';
+        if (ch == '\"') out += '\\\\';
         out += ch;
     }
-    out += '"';
+    out += '\"';
     return out;
 }
 
