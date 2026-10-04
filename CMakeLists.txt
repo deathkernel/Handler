@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Handler VERSION 0.5.0 LANGUAGES CXX)
+project(Handler VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,11 @@ add_executable(handler
     src/environment_guardian.cpp
     src/resource_guardian.cpp
     src/toolchain_doctor.cpp
+    src/tool_updates.cpp
+    src/risky_command.cpp
+    src/safe_mode.cpp
+    src/deep_cleanup.cpp
+    src/uninstall.cpp
 )
 
 target_include_directories(handler PRIVATE include)
