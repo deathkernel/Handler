@@ -7,6 +7,11 @@
 #include "handler/maintenance.h"
 #include "handler/module.h"
 #include "handler/project_context.h"
+#include "handler/policy.h"
+#include "handler/recovery_journal.h"
+#include "handler/snapshot.h"
+#include "handler/transaction.h"
+#include "handler/verification.h"
 #include "handler/router.h"
 #include "handler/state_store.h"
 #include "handler/system_info.h"
@@ -22,7 +27,7 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.2.0";
+constexpr const char* kVersion = "0.3.0";
 
 std::filesystem::path stateRoot() {
     const char* localAppData = std::getenv("LOCALAPPDATA");
