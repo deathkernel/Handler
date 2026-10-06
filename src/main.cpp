@@ -99,6 +99,65 @@ int runSafeMode() {
 
 handler::ProjectContext currentProject();
 
+int runUninstall(const std::string& ecosystemName, const std::string& package,
+               bool dryRun) {
+    handler::UninstallEcosystem ecosystem;
+    if (ecosystemName == "python")
+        ecosystem = handler::UninstallEcosystem::Python;
+    else if (ecosystemName == "node")
+        ecosystem = handler::UninstallEcosystem::NodeJs;
+    else {
+        std::cerr << "Usage: handler uninstall <python|node> <package> [--dry-run]\n";
+        return 2;
+    }
+
+    const auto context = currentProject();
+    if (context.root.empty()) {
+        std::cerr << "Uninstall blocked: no supported project detected.\n";
+        return 3;
+    }
+
+    const auto plan = handler::planUninstall(context.root, ecosystem, package);
+    std::cout << "Uninstall plan\n--------------\n"
+              << "Project : " << context.root << "\n"
+              << "Package : " << package << "\n"
+              << "Version : " << (plan.installedVersion.empty() ? "unknown" : plan.installedVersion) << "\n"
+              << "Impact  : ";
+    for (std::size_t i = 0; i < plan.affected.size(); ++i) {
+        if (i) std::cout << ", ";
+        std::cout << plan.affected[i];
+    }
+    std::cout << "\nReason  : " << plan.reason << "\n"
+              << "Command : " << plan.command << "\n";
+
+    if (!plan.allowed) {
+        makeHistory().record("UNINSTALL_BLOCKED", package + " | " + plan.reason);
+        return 3;
+    }
+    if (dryRun) {
+        makeHistory().record("UNINSTALL_DRY_RUN", package + " | version=" + plan.installedVersion);
+        std::cout << "Dry run: no package or project files were modified.\n";
+        return 0;
+    }
+
+    std::cout << "This will remove the package from the current project environment. "
+                 "Handler will back up the manifest/lockfile and retain a recovery snapshot. [y/N]: ";
+    std::string answer;
+    std::getline(std::cin, answer);
+    if (answer != "y" && answer != "Y") {
+        makeHistory().record("UNINSTALL_CANCELLED", package);
+        std::cout << "Uninstall cancelled.\n";
+        return 2;
+    }
+
+    const auto result = handler::executeUninstall(plan);
+    makeHistory().record(result.success ? "UNINSTALL_SUCCESS" : "UNINSTALL_FAILED",
+                         package + " | version=" + plan.installedVersion +
+                         " | snapshot=" + result.snapshotId);
+    std::cout << result.details << "\n";
+    return result.success ? 0 : 1;
+}
+
 int runToolchainRepair(const std::string& tool) {
     const auto findings = handler::inspectToolchain({tool});
     if (findings.empty() || !findings.front().available) {
@@ -427,7 +486,7 @@ void printUsage() {
         << "  handler protect                Run protection diagnostics\n"
         << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler doctor-repair          Diagnose toolchains and show guarded repair candidates\n"
-        << "  handler toolchain-repair <tool> Repair a supported installed toolchain\n"
+        << "  handler toolchain-repair <tool> Repair a supported installed toolchain\n"        << "  handler uninstall <python|node> <package> [--dry-run] Remove a direct project dependency safely\n"
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler repair python-module <package> Repair a Python module safely\n"
@@ -760,6 +819,13 @@ int main(int argc, char* argv[]) {
         return runPathRepair(argv[2]);
     }
     if (command == "protect") return runProtection();
+    if (command == "uninstall") {
+        if (argc < 4) {
+            std::cerr << "Usage: handler uninstall <python|node> <package> [--dry-run]\n";
+            return 2;
+        }
+        return runUninstall(argv[2], argv[3], argc >= 5 && std::string(argv[4]) == "--dry-run");
+    }
     if (command == "toolchain-repair") {
         if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\\n"; return 2; }
         return runToolchainRepair(argv[2]);
