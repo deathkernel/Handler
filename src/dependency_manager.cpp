@@ -50,14 +50,18 @@ DependencyInfo inspectDependencies(const std::filesystem::path& root, const std:
 
 void printDependencies(const DependencyInfo& info) {
     if (info.manifest.empty()) {
-        std::cout << "Dependency inspection: no supported manifest found.\n";
+        std::cout << "Dependency inspection: no supported manifest found.
+";
         return;
     }
     std::cout << "Dependency inspection [" << info.ecosystem << "] via "
-              << info.manifest << ":\n";
-    for (const auto& dep : info.declared) std::cout << "  " << dep << '\n';
+              << info.manifest << ":
+";
+    for (const auto& dep : info.declared) std::cout << "  " << dep << '
+';
     if (info.declared.empty())
-        std::cout << "  No dependency entries parsed by the current lightweight scanner.\n";
+        std::cout << "  No dependency entries parsed by the current lightweight scanner.
+";
 }
 
 } // namespace handler
