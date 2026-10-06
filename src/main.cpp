@@ -72,9 +72,31 @@ void printDecisions(const std::vector<handler::Decision>& decisions) { for (cons
 
 int runDecide(const std::string& text) { const auto errors = handler::detectErrors(text); const auto decisions = handler::decideRepairs(errors); printDecisions(decisions); handler::History(std::filesystem::path(stateRoot()) / "history.log").record("DECISION", "actions=" + std::to_string(decisions.size())); return decisions.empty() ? 0 : 1; }
 
-int runCommand(const std::string& executable, const std::vector<std::string>& args) { handler::CommandSpec spec{"cli-command", executable, args, handler::RiskLevel::Medium}; std::cout << handler::buildCommandLine(spec) << "
-"; const auto policy = handler::evaluatePolicy(handler::SafetyMode::Confirm, spec.risk); if (!policy.allowed) { std::cout << "Command blocked: " << policy.reason << "
-"; return 3; } const auto result = handler::executeCommand(spec); std::cout << result.output; return result.started ? result.exitCode : 1; }
+int runCommand(const std::string& executable, const std::vector<std::string>& args) {
+    if (!handler::isAllowedExecutable(executable)) {
+        std::cerr << "Command blocked: executable is not allowlisted.\n";
+        return 3;
+    }
+    handler::CommandSpec spec{"cli-command", executable, args, handler::RiskLevel::Medium};
+    std::cout << handler::buildCommandLine(spec) << "\n";
+    const auto policy = handler::evaluatePolicy(handler::SafetyMode::Confirm, spec.risk);
+    if (policy.requiresConfirmation) {
+        std::cout << policy.reason << " [y/N]: ";
+        std::string answer;
+        std::getline(std::cin, answer);
+        if (answer != "y" && answer != "Y") {
+            std::cout << "Command cancelled.\n";
+            return 0;
+        }
+    }
+    if (!policy.allowed && !policy.requiresConfirmation) {
+        std::cout << "Command blocked: " << policy.reason << "\n";
+        return 3;
+    }
+    const auto result = handler::executeCommand(spec);
+    std::cout << result.output;
+    return result.started ? result.exitCode : 1;
+}
 
 void printUsage() {
     std::cout
@@ -165,7 +187,7 @@ Self-check found a required problem.
     return ok ? 0 : 1;
 }
 
-int runTempCleanup() {
+int runTempCleanup(bool dryRun = false) {
     const auto health = handler::inspectSystem();
     if (!health.tempAvailable) {
         std::cerr << "Handler: TEMP is not available. Cleanup skipped.
@@ -175,7 +197,7 @@ int runTempCleanup() {
     }
     std::cout << "Cleaning: " << health.tempPath << '
 ';
-    const auto result = handler::cleanTempDirectory(std::filesystem::path(health.tempPath));
+    const auto result = handler::cleanTempDirectory(std::filesystem::path(health.tempPath), dryRun);
     handler::printCleanupResult(result);
     handler::History(std::filesystem::path(stateRoot()) / "history.log").record("TEMP_CLEANUP",
         "files=" + std::to_string(result.filesRemoved) +
@@ -299,6 +321,7 @@ int main(int argc, char* argv[]) {
     if (command == "updates") return runUpdates();
     if (command == "risk") { if (argc < 3) return 2; return runRisk(argv[2]); }
     if (command == "safe-mode") return runSafeMode();
+    if (command == "temp-cleanup" && argc >= 3 && std::string(argv[2]) == "--dry-run") return runTempCleanup(true);
 
     if (command == "decide") { if (argc < 3) { std::cerr << "Usage: handler decide <error text>
 "; return 2; } return runDecide(argv[2]); }
