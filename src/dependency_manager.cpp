@@ -217,7 +217,7 @@ std::string installedDependencyVersion(const std::string& ecosystem,const std::s
             return depTrim(r.output.substr(begin,end==std::string::npos?r.output.size()-begin:end-begin));
         }
     } else {
-        const std::regex re(R"("version"\s*:\s*"([^"]+)")");
+        const std::regex re(R"DELIM("version"\s*:\s*"([^"]+)")DELIM");
         if(std::regex_search(r.output,m,re)) return m[1].str();
     }
     return {};
