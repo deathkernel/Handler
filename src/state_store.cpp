@@ -1,6 +1,7 @@
 #include "handler/state_store.h"
 
-#include <fstream>\n#include <utility>
+#include <fstream>
+#include <utility>
 
 namespace handler {
 
