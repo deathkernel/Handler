@@ -27,6 +27,7 @@ add_executable(handler
     src/recovery_journal.cpp
     src/command_engine.cpp
     src/action_engine.cpp
+    src/state_paths.cpp
     src/decision_engine.cpp
     src/recovery.cpp
     src/circuit_breaker.cpp
