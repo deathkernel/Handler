@@ -95,4 +95,63 @@ int repairPythonModule(const char* rawPackage) {
     return 0;
 }
 
+int repairNodeModule(const char* rawPackage) {
+    const std::string package = rawPackage ? rawPackage : "";
+    if (!validPackageName(package)) {
+        std::cerr << "Repair blocked: invalid Node package name.\n";
+        return 3;
+    }
+
+    std::cout << "Node repair requested for: " << package << "\n";
+    std::cout << "Handler will run: npm install " << package << "\n";
+
+    const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
+    if (policy.requiresConfirmation) {
+        std::cout << policy.reason << " [y/N]: ";
+        std::string answer;
+        std::getline(std::cin, answer);
+        if (answer != "y" && answer != "Y") {
+            std::cout << "Repair cancelled.\n";
+            return 0;
+        }
+    }
+
+    CommandSpec install{
+        "node-repair",
+        "npm",
+        {"install", package, "--no-audit", "--no-fund"},
+        RiskLevel::High,
+        180000
+    };
+
+    const auto installResult = executeCommand(install);
+    std::cout << installResult.output;
+
+    History history(repairStateRoot() / "history.log");
+    if (!installResult.started || installResult.exitCode != 0) {
+        history.record("NODE_REPAIR_FAILED", package + " | " + installResult.error);
+        std::cerr << "Repair failed. No further action taken.\n";
+        return installResult.started ? installResult.exitCode : 1;
+    }
+
+    CommandSpec verify{
+        "node-repair-verify",
+        "npm",
+        {"ls", package, "--depth=0"},
+        RiskLevel::Low,
+        30000
+    };
+
+    const auto verifyResult = executeCommand(verify);
+    if (!verifyResult.started || verifyResult.exitCode != 0) {
+        history.record("NODE_REPAIR_UNVERIFIED", package);
+        std::cerr << "Package installation completed but verification failed.\n";
+        return 1;
+    }
+
+    std::cout << "Repair verified: " << package << " is installed.\n";
+    history.record("NODE_REPAIR_SUCCESS", package);
+    return 0;
+}
+
 } // namespace handler
