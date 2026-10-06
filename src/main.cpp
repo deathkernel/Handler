@@ -29,6 +29,7 @@
 #include "handler/state_store.h"
 #include "handler/system_info.h"
 #include "handler/temp_cleaner.h"
+#include "handler/repair.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -197,6 +198,7 @@ void printUsage() {
         << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
+        << "  handler repair python-module <package> Repair a Python module safely\n"
         << "  handler safe-mode              Prepare isolated sandbox context\n"
         << "  handler modules                Show registered modules\n"
         << "  handler version                Show Handler version\n"
@@ -375,13 +377,22 @@ int main(int argc, char* argv[]) {
 
     const std::string command = argv[1];
 
-    if (command == "protect") return runProtection();\n    if (command == "doctor") return runDoctor();
+    if (command == "protect") return runProtection();
+    if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
     if (command == "risk") {
         if (argc < 3) return 2;
         return runRisk(argv[2]);
     }
     if (command == "safe-mode") return runSafeMode();
+
+    if (command == "repair") {
+        if (argc < 4 || std::string(argv[2]) != "python-module") {
+            std::cerr << "Usage: handler repair python-module <package>\n";
+            return 2;
+        }
+        return handler::repairPythonModule(argv[3]);
+    }
 
     if (command == "temp-cleanup" && argc >= 3 &&
         std::string(argv[2]) == "--dry-run")
