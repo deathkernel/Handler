@@ -660,7 +660,7 @@ int runProject() {
     return 0;
 }
 
-int runDeps() {
+int runDeps(int argc, char* argv[]) {
     const auto context = currentProject();
     if (context.root.empty()) {
         std::cout << "No supported project detected in the current directory or its parents.\n";
@@ -672,8 +672,19 @@ int runDeps() {
     const auto conflicts = handler::findDependencyConflicts(requirements);
     const auto candidates = handler::proposeDependencyUpgrades(requirements);
     handler::printDependencyAnalysis(conflicts, candidates);
+
+    if (argc >= 4 && std::string(argv[2]) == "--upgrade") {
+        const std::string package = argv[3];
+        for (const auto& req : requirements) {
+            if (req.name == package)
+                return handler::upgradeDependency(context.root, context.type, req.name, req.constraint);
+        }
+        std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
+        return 3;
+    }
+
     makeHistory().record("DEPENDENCY_INSPECTION", info.ecosystem);
-    return 0;
+    return conflicts.empty() ? 0 : 4;
 }
 
 int runGraph() {
@@ -830,7 +841,11 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "project") return runProject();
-    if (command == "deps") return runDeps();
+    if (command == "deps") return runDeps(argc, argv);
+    if (command == "dependency-upgrade") {
+        if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
+        return runDeps(4, new char*[]{argv[0], argv[1], const_cast<char*>("--upgrade"), argv[2]});
+    }
     if (command == "graph") return runGraph();
 
     const int result = router.dispatch(command);
