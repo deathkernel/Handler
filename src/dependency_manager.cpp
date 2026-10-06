@@ -1,4 +1,8 @@
 #include "handler/dependency_manager.h"
+#include "handler/action_engine.h"
+#include "handler/artifact_backup.h"
+#include "handler/history.h"
+#include "handler/transaction.h"
 
 #include <fstream>
 #include <iostream>
