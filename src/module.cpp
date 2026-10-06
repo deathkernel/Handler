@@ -1,4 +1,6 @@
-#include "handler/module.h"\n\n#include <utility>
+#include "handler/module.h"
+
+#include <utility>
 
 namespace handler {
 
