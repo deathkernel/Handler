@@ -3,6 +3,7 @@
 #include "handler/artifact_backup.h"
 #include "handler/history.h"
 #include "handler/transaction.h"
+#include "handler/state_paths.h"
 
 #include <fstream>
 #include <iostream>
@@ -180,11 +181,7 @@ bool validDependencyPackage(const std::string& p) {
         if(!(std::isalnum(ch)||ch=='-'||ch=='_'||ch=='.'||ch=='@'||ch=='/')) return false;
     return true;
 }
-std::filesystem::path dependencyStateRoot() {
-    if(const char* p=std::getenv("LOCALAPPDATA");p&&*p) return std::filesystem::path(p)/"Handler";
-    if(const char* p=std::getenv("USERPROFILE");p&&*p) return std::filesystem::path(p)/".handler";
-    return std::filesystem::current_path()/".handler";
-}
+std::filesystem::path dependencyStateRoot() { return handlerStateRoot(); }
 std::vector<std::string> registryVersions(const std::string& ecosystem,const std::string& package,
                                            const std::filesystem::path& root) {
     CommandSpec cmd{"dependency-registry-query",ecosystem=="Python"?"python":"npm",{},RiskLevel::Low,45000};
