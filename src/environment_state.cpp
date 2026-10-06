@@ -37,9 +37,14 @@ EnvironmentState captureEnvironmentState() {
     state.computerName = env("COMPUTERNAME");
     state.userName = env("USERNAME");
     state.tempPath = env("TEMP");
+#ifndef _WIN32
+    if (state.computerName.empty()) state.computerName = env("HOSTNAME");
+    if (state.userName.empty()) state.userName = env("USER");
+    if (state.tempPath.empty()) state.tempPath = env("TMPDIR");
+#endif
     state.pathValue = env("PATH");
     state.currentDirectory = std::filesystem::current_path();
-    state.handlerVersion = "0.7.0";
+    state.handlerVersion = "0.8.0";
     return state;
 }
 
