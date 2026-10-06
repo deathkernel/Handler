@@ -249,16 +249,29 @@ bool satisfiesDependencyConstraint(const DependencyVersion& v,const std::string&
     return true;
 }
 bool dependencyConstraintsCompatible(const std::vector<std::string>& constraints) {
-    if(constraints.empty()) return false;
-    for(int major=0;major<=20;++major)
-        for(int minor=0;minor<=20;++minor)
-            for(int patch: {0,1,99}) {
-                auto v=parseDependencyVersion(std::to_string(major)+"."+std::to_string(minor)+"."+std::to_string(patch));
-                if(!v) continue;
-                bool ok=true;
-                for(const auto& c:constraints) ok=ok&&satisfiesDependencyConstraint(*v,c);
-                if(ok) return true;
+    if (constraints.empty()) return false;
+
+    std::vector<DependencyVersion> candidates;
+    for (const auto& constraint : constraints) {
+        for (const auto& atom : depAtoms(constraint)) {
+            candidates.push_back(atom.v);
+            if (atom.v.patch < 2147483647)
+                candidates.push_back({atom.v.major, atom.v.minor, atom.v.patch + 1, {}});
+            if (atom.v.patch > 0)
+                candidates.push_back({atom.v.major, atom.v.minor, atom.v.patch - 1, {}});
+        }
+    }
+
+    for (const auto& candidate : candidates) {
+        bool ok = true;
+        for (const auto& constraint : constraints) {
+            if (!satisfiesDependencyConstraint(candidate, constraint)) {
+                ok = false;
+                break;
             }
+        }
+        if (ok) return true;
+    }
     return false;
 }
 std::optional<std::string> selectCompatibleDependencyVersion(
