@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <utility>
+#include <algorithm>
 
 namespace handler {
 
@@ -61,6 +62,28 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
         else if (key == "handler_version") state.handlerVersion = value;
     }
     return state;
+}
+
+std::vector<SnapshotInfo> SnapshotStore::list() const {
+    std::vector<SnapshotInfo> snapshots;
+    std::error_code ec;
+    if (!std::filesystem::exists(root_, ec)) return snapshots;
+    for (const auto& entry : std::filesystem::directory_iterator(root_, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file() || entry.path().extension() != ".state") continue;
+        snapshots.push_back({entry.path().stem().string(), entry.path()});
+    }
+    std::sort(snapshots.begin(), snapshots.end(),
+              [](const auto& a, const auto& b) { return a.id > b.id; });
+    return snapshots;
+}
+
+std::optional<SnapshotInfo> SnapshotStore::find(const std::string& id) const {
+    if (id.empty()) return std::nullopt;
+    const auto path = root_ / (id + ".state");
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return std::nullopt;
+    return SnapshotInfo{id, path};
 }
 
 } // namespace handler
