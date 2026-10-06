@@ -132,8 +132,6 @@ bool repairToolchain(const std::string& tool, std::string& details) {
     }
 
 
-    details = "winget toolchain repair is Windows-only";
-    return false;
     const auto finding = inspectToolchain({tool});
     if (finding.empty() || !finding.front().available) {
         details = "toolchain repair requires an already installed runtime; missing tools need explicit installation";
