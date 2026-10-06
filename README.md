@@ -305,8 +305,8 @@ Before deep removal, Handler should check whether a component is:
 - Globally configured
 - Safe to remove
 
-### 🗑️ 17. Complete Uninstallation
-For supported software and development components, Handler should be able to perform a permission-based deep uninstall rather than removing only the visible application.
+### 🗑️ 17. Supported Project Package Uninstallation
+Handler currently supports permission-based removal of direct Python/Node.js project dependencies with project-local scope, dependency-impact checks, backups, verification, and truthful rollback reporting. Deep OS-level application removal is intentionally not enabled.
 
 Where appropriate, this can include:
 - Main installation
@@ -837,20 +837,18 @@ Phase 4 is complete for its defined scope: safe removal of direct Python/Node.js
 - Recovery circuit breaker
 
 ### Phase 4 — Maintenance
-- Updates
-- Deep cleanup
-- Complete uninstallation
+- Updates / toolchain inspection and guarded Windows repair
+- TEMP cleanup
+- Guarded direct Python/Node.js project uninstallation
 - Project-aware dependency maintenance
-- Safe component reuse
+- Safe component reuse foundations
 
 ### Phase 5 — Performance & Hardening
-- Modular/lazy execution
-- Idle state
-- Transactional operations
-- Recovery circuit breaker
-- Permission model
-- Audit/recovery journal
-- Extensive testing
+- Cross-platform execution hardening
+- Transactional operations and recovery journal
+- Permission and risk model
+- CI/build/test hardening
+- Release documentation and final audit
 
 ## Status of the Feature List
 
