@@ -311,7 +311,7 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
         });
 
     if (!result.committed) {
-        const rollbackVerified = result.rolledBack && installedAtVersion(plan);
+        const bool rollbackVerified = result.rolledBack && installedAtVersion(plan);
         return {false, rollbackVerified,
                 rollbackVerified ? "uninstall failed; exact package version was restored and verified"
                                  : "uninstall failed; rollback was attempted but could not be verified",
