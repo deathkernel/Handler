@@ -52,12 +52,30 @@ int main() {
     const auto upgradeCandidates = proposeDependencyUpgrades(requirements);
     assert(upgradeCandidates.size() == 3);
 
+    const auto v250 = parseDependencyVersion("2.5.0");
+    const auto v350 = parseDependencyVersion("3.5.0");
+    assert(v250.has_value() && v350.has_value());
+    assert(satisfiesDependencyConstraint(*v250, ">=2.0,<3.0"));
+    assert(!satisfiesDependencyConstraint(*v350, ">=2.0,<3.0"));
+    assert(dependencyConstraintsCompatible({">=2.0", "<3.0"}));
+    assert(!dependencyConstraintsCompatible({">=3.0", "<3.0"}));
+    const auto selected = selectCompatibleDependencyVersion(
+        {">=2.0,<4.0"}, {"1.9.0", "2.4.0", "3.1.0", "4.0.0"});
+    assert(selected.has_value() && *selected == "3.1.0");
+    const auto caret = selectCompatibleDependencyVersion(
+        {"^2.1.0"}, {"2.0.0", "2.1.0", "2.9.0", "3.0.0"});
+    assert(caret.has_value() && *caret == "2.9.0");
+
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
     assert(graph[0].source == "demo");
     const transitive = buildTransitiveDependencyGraph(
         graph, {{"flask", "werkzeug", "transitive"}, {"demo", "requests", "declares"}});
-    assert(transitive.size() == 3);
+    assert(transitive.size() == 4);
+    const werkzeugImpact = analyzeDependencyImpact(transitive, "werkzeug");
+    assert(werkzeugImpact.size() == 1);
+    assert(werkzeugImpact[0].affected.size() == 2);
+    assert(werkzeugImpact[0].risk == "HIGH");
     const impact = analyzeDependencyImpact(transitive, "requests");
     assert(impact.size() == 1);
     assert(impact[0].risk == "MEDIUM");
