@@ -6,6 +6,7 @@
 #include "handler/snapshot.h"
 #include "handler/path_guardian.h"
 #include "handler/environment_guardian.h"
+#include "handler/toolchain_doctor.h"
 
 #include <cassert>
 #include <iostream>
@@ -79,6 +80,13 @@ int main() {
     assert(!isSensitiveVariable("API_TOKEN"));
     assert(isSensitiveVariable("NORMAL_VALUE") == false);
     std::filesystem::remove_all(envRoot, ec);
+
+    const auto doctor = inspectToolchain({"python", "definitely-not-a-handler-tool"});
+    assert(doctor.size() == 2);
+    assert(!doctor[1].available);
+    assert(doctor[1].status == "MISSING");
+    const auto candidates = proposeToolchainRepairs(doctor);
+    assert(candidates.size() == 2);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
