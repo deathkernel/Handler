@@ -886,3 +886,23 @@ Missing tools and unsupported ecosystems remain review-only until an explicit in
 
 Handler version is now **0.8.0**.
 
+## Batch 4 — Recovery Observability & Collision Safety
+
+Batch 4 strengthens the recovery layer without pretending that environment snapshots are full OS rollback points:
+
+- **Recovery journal inspection** — `handler recovery-log` displays the latest structured recovery events from the centralized transaction journal.
+- **Structured journal parsing** — recovery records are exposed as timestamp/stage/details entries for deterministic inspection and future tooling.
+- **Snapshot collision protection** — snapshots created within the same millisecond receive a deterministic suffix instead of overwriting an existing recovery point.
+- **Centralized state usage** — the CLI now delegates state-root resolution to the shared Handler state-path implementation instead of maintaining a duplicate path policy.
+- **Regression coverage** — tests cover journal round-tripping and repeated snapshot creation.
+- **No fake rollback** — recovery snapshots continue to represent Handler's captured environment baseline; they do not claim to reverse arbitrary OS package/filesystem changes.
+
+### Recovery Commands
+
+```text
+handler snapshots
+handler recovery-log
+handler rollback <snapshot-id>
+```
+
+`recovery-log` is intentionally read-only. It provides visibility into transaction stages such as START, SNAPSHOT, ROLLBACK, and COMMIT without mutating the recovery state.
