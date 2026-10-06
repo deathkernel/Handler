@@ -40,3 +40,5 @@ Audit scope:
 The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The final CI run for this audit branch is the release gate; no claim of post-fix green status is made until that run completes.
 
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
+
+- Dependency compatibility checks now use constraint-derived boundary candidates instead of a fixed 0–20 version search range; high-version regression coverage was added.
