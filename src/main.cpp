@@ -844,7 +844,15 @@ int main(int argc, char* argv[]) {
     if (command == "deps") return runDeps(argc, argv);
     if (command == "dependency-upgrade") {
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
-        return runDeps(4, new char*[]{argv[0], argv[1], const_cast<char*>("--upgrade"), argv[2]});
+        const auto context = currentProject();
+        if (context.root.empty()) { std::cerr << "No supported project detected.\n"; return 1; }
+        const auto info = handler::inspectDependencies(context.root, context.type);
+        const auto requirements = handler::parseDependencyRequirements(info);
+        for (const auto& req : requirements)
+            if (req.name == argv[2])
+                return handler::upgradeDependency(context.root, context.type, req.name, req.constraint);
+        std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
+        return 3;
     }
     if (command == "graph") return runGraph();
 
