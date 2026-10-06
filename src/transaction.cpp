@@ -65,4 +65,20 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
             "action verified and committed"};
 }
 
+
+TransactionResult Transaction::runApproved(RiskLevel risk, const Action& action,
+                                           const Verify& verify, const Rollback& rollback) {
+    if (!action || !verify)
+        return {false, false, false, {}, "invalid transaction callbacks"};
+    const auto previous = mode_;
+    mode_ = SafetyMode::Auto;
+    const auto result = [&] {
+        const auto decision = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
+        if (!decision.allowed) return TransactionResult{false, false, false, {}, "pre-confirmed transaction rejected"};
+        return run(RiskLevel::Low, action, verify, rollback);
+    }();
+    mode_ = previous;
+    return result;
+}
+
 } // namespace handler
