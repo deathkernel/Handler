@@ -99,6 +99,29 @@ int runSafeMode() {
 
 handler::ProjectContext currentProject();
 
+int runToolchainRepair(const std::string& tool) {
+    const auto findings = handler::inspectToolchain({tool});
+    if (findings.empty() || !findings.front().available) {
+        std::cerr << "Toolchain repair blocked: " << tool << " is not available. "
+                  << "Missing runtimes require an explicit installer/source.\n";
+        return 3;
+    }
+    std::cout << "Toolchain repair requested for " << tool
+              << ". This may modify installed developer tooling. [y/N]: ";
+    std::string answer;
+    std::getline(std::cin, answer);
+    if (answer != "y" && answer != "Y") {
+        makeHistory().record("TOOLCHAIN_REPAIR_CANCELLED", tool);
+        std::cout << "Toolchain repair cancelled.\n";
+        return 0;
+    }
+    std::string details;
+    const bool ok = handler::repairToolchain(tool, details);
+    std::cout << details << "\n";
+    makeHistory().record(ok ? "TOOLCHAIN_REPAIR_SUCCESS" : "TOOLCHAIN_REPAIR_FAILED", tool);
+    return ok ? 0 : 1;
+}
+
 int runDoctorRepair() {
     const auto findings = handler::inspectToolchain(
         {"python", "node", "git", "cmake", "dotnet", "java", "go", "cargo"});
@@ -404,6 +427,7 @@ void printUsage() {
         << "  handler protect                Run protection diagnostics\n"
         << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler doctor-repair          Diagnose toolchains and show guarded repair candidates\n"
+        << "  handler toolchain-repair <tool> Repair a supported installed toolchain\n"
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler repair python-module <package> Repair a Python module safely\n"
@@ -718,6 +742,10 @@ int main(int argc, char* argv[]) {
         return runPathRepair(argv[2]);
     }
     if (command == "protect") return runProtection();
+    if (command == "toolchain-repair") {
+        if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\\n"; return 2; }
+        return runToolchainRepair(argv[2]);
+    }
     if (command == "doctor-repair") return runDoctorRepair();
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
