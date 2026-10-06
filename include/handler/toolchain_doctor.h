@@ -18,4 +18,5 @@ struct ToolchainRepair {
 };
 std::vector<ToolchainFinding> inspectToolchain(const std::vector<std::string>& tools);
 std::vector<ToolchainRepair> proposeToolchainRepairs(const std::vector<ToolchainFinding>& findings);
+bool repairToolchain(const std::string& tool, std::string& details);
 }
