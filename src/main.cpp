@@ -162,9 +162,17 @@ int runPathRepair(const std::string& baselineFile) {
             return ok;
         },
         [&] {
-            std::string current;
-            const bool ok = handler::analyzePathEntries().details.find("diagnostic") != std::string::npos;
-            return handler::VerificationResult{ok, "PATH inspection", current};
+            const auto verifyFile = stateRoot() / "transactions" / "path-verify.baseline";
+            const bool saved = handler::savePathBaseline(verifyFile);
+            std::vector<std::string> actual;
+            const bool loaded = saved && handler::loadPathBaseline(verifyFile, actual);
+            std::error_code ec;
+            std::filesystem::remove(verifyFile, ec);
+            bool matches = loaded && actual == entries;
+            return handler::VerificationResult{
+                matches, "PATH baseline comparison",
+                matches ? "current PATH matches trusted baseline"
+                         : "current PATH differs from trusted baseline"};
         },
         [&] {
             std::string details;
