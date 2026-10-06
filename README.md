@@ -514,135 +514,85 @@ Implemented:
 
 Level 7 is still a hardening foundation. Timeout handling, process-tree containment, job-object isolation, and broader execution-policy enforcement remain later hardening work.
 
-### Level 6 — Maintenance & Advanced Operations
+### ## Current Release Status
 
-33. **Development Language & Tool Updates** — update runtimes, SDKs, compilers, and developer tools using compatibility checks and recovery protection.
-34. **Risky Command Interception** — apply the safety and decision systems to operations that could affect the wider machine or multiple projects.
-35. **Safe Mode / Isolation** — test or stage risky changes in isolation where practical.
-36. **Scheduled TEMP Cleanup** — use the maintenance/scheduling layer, scope rules, safety checks, execution, and verification to perform periodic %TEMP% cleanup.
-37. **Deep Cleanup** — safely identify and remove genuinely unused development components using dependency and impact analysis.
-38. **Complete Uninstallation** — perform permission-based deep removal using discovery, dependency analysis, safety, transactions, and verification.
+Handler **0.8.0** is the current development release. It is a deterministic C++17 developer-environment protection and recovery tool with Windows-first repair capabilities and portable observation/testing on Linux and macOS.
 
-### Dependency Rule
+### Implemented release capabilities
 
-A feature should not be considered complete merely because its code exists. Its **required foundation must already be reliable**.
+- Deterministic diagnostics, decision routing, command risk classification, and controlled command execution.
+- Environment state, history, snapshots, recovery journal, verification, and transactional operations.
+- Python and Node.js dependency inspection, compatibility analysis, guarded upgrades, and project-local uninstall.
+- Python/Node repair workflows with verification and recovery handling.
+- Toolchain Doctor with guarded Windows/winget upgrades for supported installed tools.
+- PATH and environment protection/repair foundations.
+- TEMP cleanup with dry-run and confirmation safeguards.
+- Linux/macOS core observation and CI support.
+- Explicit safety boundaries that avoid claiming unsupported OS-level or filesystem-wide rollback.
 
-For example:
+### Deliberate safety boundaries
 
-`Automatic Error Recovery`
-→ requires Error Detection + Component Discovery + Verification + Safety + Snapshots + Command Execution + Decision Rules.
+Handler does not silently remove global packages, runtimes, operating-system applications, or arbitrary files. Package uninstall is limited to direct Python/Node.js project dependencies and requires project-local environments plus verification. Toolchain repair is limited to supported installed tools on Windows; missing runtimes and unsupported package-manager paths remain blocked or review-only.
 
-`Deep Cleanup`
-→ requires Dependency Management + Impact Analysis + Discovery + Safety + Snapshots + Verification + Transaction/Recovery support.
+### Platform support
 
-`Complete Uninstallation`
-→ requires the same foundations plus stronger permission and rollback safeguards.
+| Capability | Windows | Linux | macOS |
+|---|---|---|---|
+| Build + core tests | ✅ | ✅ | ✅ |
+| Environment observation | ✅ | ✅ | ✅ |
+| PATH/component discovery | ✅ | ✅ | ✅ |
+| Python/Node dependency analysis | ✅ | ✅ | ✅ |
+| Project package uninstall | ✅ | ✅ | ✅ |
+| Guarded Python/Node repair | ✅ | Foundation/limited | Foundation/limited |
+| Toolchain automatic repair | Windows/winget | ❌ | ❌ |
+| Windows-native process containment | ✅ | N/A | N/A |
 
-This ordering is the canonical implementation sequence. Individual low-level tasks may be developed earlier for testing, but production capabilities should follow these dependency levels.
+### CLI quick reference
 
-## Level 2 Implementation Notes
+```text
+handler help
+handler version
+handler health
+handler self-check
+handler status
+handler state
+handler history
+handler discover [tools...]
+handler project
+handler deps [--upgrade <package>]
+handler dependency-upgrade <package>
+handler graph
+handler detect-error <text>
+handler decide <error text>
+handler recover <error text>
+handler repair python-module <package>
+handler repair node-module <package>
+handler doctor
+handler doctor-repair
+handler toolchain-repair <tool>
+handler updates
+handler risk <command>
+handler path-audit
+handler path-repair <baseline-file>
+handler env-baseline <file> <name...>
+handler env-audit <file>
+handler env-repair <file> [--user]
+handler protect
+handler safe-mode
+handler temp-cleanup [--dry-run]
+handler maintenance
+handler uninstall <python|node> <package> [--dry-run]
+handler snapshots
+handler rollback <snapshot-id>
+handler modules
+```
 
-Level 2 is intentionally **observation-only**. It discovers and models the environment without installing, removing, linking, or repairing components.
+Real uninstall is confirmation-gated; `--dry-run` only plans the operation. Rollback is reported as verified only after the captured package version is checked again.
 
-### Error Detection
-- Deterministic pattern matching for missing modules/commands, dependency conflicts, permission failures, and resource conflicts.
-- Confidence-scored observations.
-- No automatic repair yet.
-
-### Component Discovery
-- Windows PATH-based discovery for common developer tools.
-- Default scan covers Python, Node.js, Git, CMake, .NET, Java, Go, and Cargo.
-- Custom tool names can be supplied.
-- Discovery happens before future installation/recovery decisions.
-
-### Existing Component Reuse / Linking Foundation
-- Discovered components are represented with name, kind, path, and execution status.
-- Current stage is observation-only.
-- No unsafe copying or linking is performed.
-
-### Project Environment Awareness
-- Walks upward from the current directory to detect supported project manifests.
-- Recognizes Python, Node.js, Rust, Go, and C/C++ project contexts.
-- PC/System remains the primary scope; project context only refines future decisions.
-
-### Dependency Management Foundation
-- Lightweight manifest inspection for supported ecosystems.
-- Reads requirements.txt, package.json, Cargo.toml, and go.mod.
-- Does not install, upgrade, or remove anything.
-
-### Dependency Graph Foundation
-- Creates deterministic project → declared-dependency edges.
-- Provides the base for later impact analysis.
-- Deeper transitive/runtime impact analysis remains future work.
-
-### Level 2 CLI
-- handler detect-error <error text>
-- handler discover [tool ...]
-- handler project
-- handler deps
-- handler graph
-
-## Level 3 Implementation Notes
-
-Level 3 establishes Handler's safety and verification foundation before any automatic repair is introduced.
-
-Implemented:
-- **Verification Engine** — file/directory outcome checks.
-- **Permission & Safety Policies** — Auto, Confirm, and Strict modes with risk levels.
-- **Snapshots** — serialized environment-state recovery points.
-- **Transaction Foundation** — action → verification → commit, with rollback callback on failure.
-- **Recovery Journal** — timestamped observation/action/recovery records.
-- Handler version bumped to **0.3.0**.
-
-Level 3 remains a **foundation**, not a full recovery system. Snapshot restore, richer verification, interactive confirmation, and complete transactional rollback will be expanded before production automatic repair.
-
-## Level 4 Implementation Notes
-
-Level 4 adds the deterministic command and recovery decision foundation.
-
-Implemented:
-- **Command Formula & Generation Engine** — structured command specs, safe argument quoting, and an allowlisted executable set.
-- **Action / Command Execution Engine** — executes only allowlisted commands and captures output/exit status.
-- **Deterministic Decision Engine** — maps detected error categories to bounded next-step decisions.
-- **Recovery Strategy Selection** — ranks safe recovery directions before execution.
-- **Automatic Error Recovery Foundation** — recovery permission is evaluated through the Level 3 safety policy.
-- **Recovery Circuit Breaker** — stops repeated recovery attempts after a configurable failure limit.
-- Handler version bumped to **0.4.0**.
-
-Level 4 is intentionally conservative: it does not silently install packages, modify PATH, kill processes, or perform destructive repairs. Those actions require later policy-backed capabilities and stronger verification.
-
-## Level 5 Implementation Notes
-
-Level 5 adds PC protection and diagnostics on top of the Level 4 decision system.
-
-Implemented:
-- **Environment Health Check** — validates key environment areas.
-- **PATH Guardian** — detects PATH entries that no longer resolve to directories.
-- **Environment Variable Protection** — observes important variables without modifying them.
-- **Port & Resource Conflict Detection** — probes common development ports.
-- **Toolchain Doctor** — checks availability of common development tools through component discovery.
-- New diagnostic command: `handler protect`.
-- Handler version bumped to **0.5.0**.
-
-Level 5 remains observation-first: it reports risks and conflicts but does not silently modify PATH/environment variables, terminate processes, or change system configuration.
-
-## Level 6 Implementation Notes
-
-Level 6 adds maintenance and advanced-operation foundations.
-
-Implemented:
-- **Development Language & Tool Updates** — discovers installed tool locations and produces update-review candidates.
-- **Risky Command Interception** — classifies destructive/system-changing command patterns as Safe, Review, or Blocked.
-- **Safe Mode / Isolation** — creates a Handler sandbox context and validates paths against it.
-- **Deep Cleanup Foundation** — scoped cleanup primitive with an explicit backup gate.
-- **Complete Uninstallation Foundation** — validates uninstall targets and rejects filesystem roots.
-- Existing scheduled TEMP cleanup remains part of the maintenance layer.
-- New commands: `handler updates`, `handler risk <command>`, `handler safe-mode`.
-- Handler version bumped to **0.6.0**.
-
-Level 6 is intentionally conservative. Update discovery does not silently upgrade software, risky-command detection does not execute or rewrite commands, deep cleanup is scoped, and uninstallation requires explicit confirmation. Production-grade backup/restore and full Windows installer/package-manager integration remain hardening work.
+`handler version` reports **0.8.0**.
 
 ## Performance Model
+
 
 Handler should be designed around **minimum necessary execution**.
 
