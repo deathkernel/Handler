@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <thread>
 
@@ -28,6 +29,10 @@ std::wstring toWide(const std::string& value) {
             static_cast<int>(value.size()), result.data(), size) <= 0)
         return {};
     return result;
+}
+
+std::wstring toWide(const std::filesystem::path& value) {
+    return value.empty() ? std::wstring{} : value.wstring();
 }
 
 std::wstring quoteWideArgument(const std::wstring& value) {
@@ -83,14 +88,44 @@ ActionResult executeCommand(const CommandSpec& command) {
     if (!isAllowedExecutable(command.executable))
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
 
-    const std::wstring executable = toWide(command.executable);
-    if (executable.empty())
-        return {false, -1, {}, "executable is not valid UTF-8"};
+    std::filesystem::path executablePath = command.executablePath;
+    if (!executablePath.empty()) {
+        std::error_code ec;
+        const auto absolute = std::filesystem::absolute(executablePath, ec);
+        if (ec || !std::filesystem::exists(absolute, ec) ||
+            !std::filesystem::is_regular_file(absolute, ec)) {
+            return {false, -1, {}, "configured executable path does not exist"};
+        }
 
-    wchar_t resolved[MAX_PATH]{};
-    if (SearchPathW(nullptr, executable.c_str(), L".exe",
-                    MAX_PATH, resolved, nullptr) == 0)
-        return {false, -1, {}, "allowlisted executable was not found on PATH"};
+        const auto filename = absolute.filename().string();
+        const bool validPath =
+            (command.executable == "python" || command.executable == "python.exe")
+                ? (filename == "python.exe")
+                : (command.executable == "node" || command.executable == "node.exe")
+                    ? (filename == "node.exe")
+                    : false;
+        if (!validPath)
+            return {false, -1, {}, "configured executable path does not match the allowlisted tool"};
+
+        executablePath = absolute;
+    } else {
+        wchar_t resolved[MAX_PATH]{};
+        const std::wstring executable = toWide(command.executable);
+        if (executable.empty())
+            return {false, -1, {}, "executable is not valid UTF-8"};
+
+        if (SearchPathW(nullptr, executable.c_str(), L".exe",
+                        MAX_PATH, resolved, nullptr) == 0)
+            return {false, -1, {}, "allowlisted executable was not found on PATH"};
+
+        executablePath = std::filesystem::path(resolved);
+    }
+
+    if (!command.workingDirectory.empty()) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(command.workingDirectory, ec))
+            return {false, -1, {}, "working directory does not exist"};
+    }
 
     SECURITY_ATTRIBUTES securityAttributes{};
     securityAttributes.nLength = sizeof(securityAttributes);
@@ -116,10 +151,13 @@ ActionResult executeCommand(const CommandSpec& command) {
 
     PROCESS_INFORMATION process{};
     std::wstring commandLine = buildWideCommandLine(command);
+    const std::wstring workingDirectory = toWide(command.workingDirectory);
 
     const BOOL created = CreateProcessW(
-        resolved, commandLine.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+        executablePath.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
+        CREATE_NO_WINDOW, nullptr,
+        workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
+        &startup, &process);
 
     CloseHandle(writePipe);
 
@@ -189,7 +227,15 @@ ActionResult executeCommand(const CommandSpec& command) {
     if (!isAllowedExecutable(command.executable))
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
 
-    const std::string line = buildCommandLine(command) + " 2>&1";
+    std::string line = buildCommandLine(command) + " 2>&1";
+
+    if (!command.workingDirectory.empty()) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(command.workingDirectory, ec))
+            return {false, -1, {}, "working directory does not exist"};
+        line = "cd " + quoteArgument(command.workingDirectory.string()) + " && " + line;
+    }
+
     FILE* pipe = popen(line.c_str(), "r");
     if (!pipe) return {false, -1, {}, "failed to start command"};
 
