@@ -55,6 +55,13 @@ int main() {
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
     assert(graph[0].source == "demo");
+    const transitive = buildTransitiveDependencyGraph(
+        graph, {{"flask", "werkzeug", "transitive"}, {"demo", "requests", "declares"}});
+    assert(transitive.size() == 3);
+    const impact = analyzeDependencyImpact(transitive, "requests");
+    assert(impact.size() == 1);
+    assert(impact[0].risk == "MEDIUM");
+    assert(impact[0].affected.size() == 1);
 
     const auto tempRoot = std::filesystem::temp_directory_path() / "handler_snapshot_test";
     std::error_code ec;
