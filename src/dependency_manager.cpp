@@ -316,7 +316,11 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
             const bool passed=after==*selected;
             return VerificationResult{passed,"installed version == "+*selected,passed?"":"installed version was "+after};
         },
-        [&] { for(const auto& backup:backups) (void)restoreArtifact(backup); });
+        [&] {
+            bool restored = true;
+            for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
+            return restored;
+        });
 
     History history(dependencyStateRoot()/"history.log");
     if(!result.committed) {
