@@ -197,8 +197,23 @@ int main() {
     const auto blockedPlan = planUninstall(
         uninstallRoot, UninstallEcosystem::Python, "handler-test-package-that-does-not-exist-987654");
     assert(blockedPlan.allowed == false);
-    assert(blockedPlan.reason.find("not currently installed") != std::string::npos ||
-           blockedPlan.reason.find("not a direct") != std::string::npos);
+    assert(!blockedPlan.reason.empty());
+    const auto pythonScopePlan = planUninstall(
+        uninstallRoot, UninstallEcosystem::Python, "handler-test-package-that-does-not-exist-987654");
+    assert(!pythonScopePlan.allowed);
+    assert(pythonScopePlan.reason.find("project-local") != std::string::npos);
+
+    std::filesystem::create_directories(uninstallRoot / "node_modules");
+    {
+        std::ofstream packageJson(uninstallRoot / "package.json");
+        packageJson << "{\"dependencies\":{\"handler-test-package-that-does-not-exist-987654\":\"1.0.0\"}}\n";
+    }
+    const auto nodeScopePlan = planUninstall(
+        uninstallRoot, UninstallEcosystem::NodeJs, "handler-test-package-that-does-not-exist-987654");
+    assert(!nodeScopePlan.allowed);
+    assert(nodeScopePlan.reason.find("not currently installed") != std::string::npos ||
+           nodeScopePlan.reason.find("not a direct") != std::string::npos);
+
     const auto invalidPlan = planUninstall(
         uninstallRoot, UninstallEcosystem::Python, "bad;package");
     assert(!invalidPlan.allowed);

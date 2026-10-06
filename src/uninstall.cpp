@@ -46,6 +46,22 @@ std::filesystem::path pythonExecutable(const std::filesystem::path& root) {
 #endif
 }
 
+bool hasProjectVirtualEnv(const std::filesystem::path& root) {
+    std::error_code ec;
+#ifdef _WIN32
+    return std::filesystem::is_regular_file(root / ".venv" / "Scripts" / "python.exe", ec) ||
+           std::filesystem::is_regular_file(root / "venv" / "Scripts" / "python.exe", ec);
+#else
+    return std::filesystem::is_regular_file(root / ".venv" / "bin" / "python", ec) ||
+           std::filesystem::is_regular_file(root / "venv" / "bin" / "python", ec);
+#endif
+}
+
+bool hasProjectNodeModules(const std::filesystem::path& root) {
+    std::error_code ec;
+    return std::filesystem::is_directory(root / "node_modules", ec);
+}
+
 std::string normalizePackage(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) {
@@ -93,6 +109,30 @@ std::string nodeVersion(const std::filesystem::path& root,
     return (colon != std::string::npos && first != std::string::npos &&
             second != std::string::npos) ? result.output.substr(first + 1, second - first - 1)
                                           : std::string{};
+}
+
+void appendDirectDependents(const std::filesystem::path& root,
+                              const std::string& ecosystem,
+                              const std::string& package,
+                              std::vector<std::string>& affected) {
+    const auto info = inspectDependencies(root, ecosystem);
+    const auto requirements = parseDependencyRequirements(info);
+    for (const auto& req : requirements) {
+        if (samePackage(req.name, package)) continue;
+        CommandSpec cmd{"uninstall-impact",
+                        ecosystem == "Python" ? pythonExecutable(root).string() : "npm",
+                        ecosystem == "Python"
+                            ? std::vector<std::string>{"-m", "pip", "show", req.name}
+                            : std::vector<std::string>{"ls", req.name, "--depth=0", "--json"},
+                        RiskLevel::Low, 30000, root};
+        const auto result = executeCommand(cmd);
+        if (!result.started || result.exitCode != 0) continue;
+        const auto normalized = normalizePackage(package);
+        std::string output = normalizePackage(result.output);
+        if (output.find("requires:") != std::string::npos &&
+            output.find(normalized) != std::string::npos)
+            affected.push_back(req.name + " (declared project dependency depends on target)");
+    }
 }
 
 bool directDependency(const std::filesystem::path& root,
@@ -168,6 +208,15 @@ UninstallPlan planUninstall(const std::filesystem::path& projectRoot,
 
     const std::string ecosystemName =
         ecosystem == UninstallEcosystem::Python ? "Python" : "Node.js";
+
+    if (ecosystem == UninstallEcosystem::Python && !hasProjectVirtualEnv(root)) {
+        plan.reason = "Python uninstall requires a project-local .venv or venv; global interpreter removal is blocked";
+        return plan;
+    }
+    if (ecosystem == UninstallEcosystem::NodeJs && !hasProjectNodeModules(root)) {
+        plan.reason = "Node.js uninstall requires project-local node_modules; global package removal is blocked";
+        return plan;
+    }
     const std::string manifestName =
         ecosystem == UninstallEcosystem::Python ? "requirements.txt" : "package.json";
     plan.manifest = root / manifestName;
@@ -179,6 +228,12 @@ UninstallPlan planUninstall(const std::filesystem::path& projectRoot,
 
     if (!directDependency(root, ecosystemName, package, plan.affected)) {
         plan.reason = "package is not a direct dependency of this project; transitive removal is blocked";
+        return plan;
+    }
+
+    appendDirectDependents(root, ecosystemName, package, plan.affected);
+    if (plan.affected.size() > 1) {
+        plan.reason = "uninstall blocked: other declared project dependencies depend on this package";
         return plan;
     }
 
@@ -243,13 +298,19 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
             bool restored = true;
             for (const auto& backup : backups)
                 restored = restoreArtifact(backup) && restored;
-            if (!reinstall(plan)) restored = false;
-            (void)restored;
+            if (restored) restored = reinstall(plan);
+            return restored;
         });
 
-    if (!result.committed)
-        return {false, result.rolledBack, result.details, result.snapshotId};
-    return {true, false, "package uninstalled and verified; manifest changes backed up", result.snapshotId};
+    if (!result.committed) {
+        const bool rollbackVerified = result.rolledBack;
+        return {false, result.rolledBack,
+                result.rolledBack ? "uninstall failed; rollback completed and was recorded"
+                                  : "uninstall failed; rollback could not be verified",
+                result.snapshotId, rollbackVerified, true};
+    }
+    return {true, false, "package uninstalled and verified; recovery artifacts retained",
+            result.snapshotId, false, false};
 }
 
 } // namespace handler
