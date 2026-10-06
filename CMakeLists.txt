@@ -65,6 +65,7 @@ add_executable(handler_tests
     src/dependency_graph.cpp
     src/policy.cpp
     src/command_engine.cpp
+    src/risky_command.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
