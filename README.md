@@ -791,6 +791,25 @@ Not yet production-complete:
 - Full verification and permission engine
 - Transactional recovery
 
+## Phase 4 — Guarded Project Package Uninstallation
+
+Phase 4 begins the production uninstall system with a deliberately narrow boundary:
+
+- **Python and Node.js project dependencies only**; operating-system application removal is not enabled by this engine.
+- **Project-local scope only**; global package removal is blocked by design.
+- **Direct dependencies only**; transitive dependency removal is blocked until the dependency graph can prove that removal is safe.
+- **Preflight planning** verifies the project manifest, direct dependency declaration, installed package version, and expected package-manager command before any modification.
+- **Manifest/lockfile backups** are created before the destructive package operation.
+- **High-risk transaction protection** creates a Handler recovery snapshot before uninstall.
+- **Post-action verification** confirms the package is absent from the project environment.
+- **Rollback attempt** reinstalls the exact captured version and restores backed-up project artifacts if verification fails. Handler does not claim filesystem-level rollback beyond the artifacts and package-manager operation it can actually restore.
+- **Dry-run support**: `handler uninstall <python|node> <package> --dry-run`.
+- **Explicit confirmation** is required immediately before the uninstall operation.
+
+Supported commands: `handler uninstall python <package>`, `handler uninstall node <package>`, and their `--dry-run` variants.
+
+The first Phase 4 batch intentionally does not remove global tools, runtimes, or operating-system applications. Those operations require separate package-manager policy, privilege handling, cross-project impact analysis, and truthful rollback semantics.
+
 ## Roadmap
 
 ### Phase 0 — Specification
