@@ -216,6 +216,8 @@ void printUsage() {
         << "  handler modules                Show registered modules\n"
         << "  handler status                 Show saved environment status\n"
         << "  handler history                Show recent Handler events\n"
+        << "  handler snapshots              List recovery snapshots\n"
+        << "  handler rollback <id>          Restore Handler baseline from snapshot\n"
         << "  handler version                Show Handler version\n"
         << "  handler help                   Show this help\n";
 }
@@ -296,6 +298,61 @@ int runTempCleanup(bool dryRun = false) {
         "files=" + std::to_string(result.filesRemoved) +
         ", skipped=" + std::to_string(result.skipped) +
         ", dry_run=" + std::string(dryRun ? "true" : "false"));
+    return 0;
+}
+
+std::filesystem::path transactionRoot() {
+    return stateRoot() / "transactions";
+}
+
+int runSnapshots() {
+    handler::SnapshotStore store(transactionRoot() / "snapshots");
+    const auto snapshots = store.list();
+    if (snapshots.empty()) {
+        std::cout << "No recovery snapshots found.\n";
+        return 0;
+    }
+    std::cout << "Recovery snapshots\n-------------------\n";
+    for (const auto& snapshot : snapshots)
+        std::cout << snapshot.id << " | " << snapshot.path.string() << '\n';
+    return 0;
+}
+
+int runRollback(const std::string& id) {
+    handler::SnapshotStore store(transactionRoot() / "snapshots");
+    const auto snapshot = store.find(id);
+    if (!snapshot) {
+        std::cerr << "Rollback blocked: snapshot not found: " << id << "\n";
+        return 2;
+    }
+    const auto state = store.load(*snapshot);
+    if (!state) {
+        std::cerr << "Rollback blocked: snapshot could not be read.\n";
+        return 2;
+    }
+
+    std::cout << "Rollback target: " << snapshot->id << "\n"
+              << "Captured: " << state->timestampUtc << "\n"
+              << "Directory: " << state->currentDirectory.string() << "\n"
+              << "Note: this restores Handler's saved baseline only; it does not "
+                 "silently modify OS environment variables. [y/N]: ";
+    std::string answer;
+    std::getline(std::cin, answer);
+    if (answer != "y" && answer != "Y") {
+        std::cout << "Rollback cancelled.\n";
+        makeHistory().record("ROLLBACK_CANCELLED", id);
+        return 0;
+    }
+
+    if (!makeStateStore().saveCurrent(*state)) {
+        std::cerr << "Rollback failed: could not restore saved Handler state.\n";
+        return 1;
+    }
+    handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
+    journal.record("MANUAL_ROLLBACK", id);
+    makeHistory().record("ROLLBACK_APPLIED",
+                         id + " | Handler baseline restored");
+    std::cout << "Handler baseline restored from snapshot " << id << ".\n";
     return 0;
 }
 
@@ -451,6 +508,11 @@ int main(int argc, char* argv[]) {
         return runRisk(joinArguments(argc, argv, 2));
     }
     if (command == "safe-mode") return runSafeMode();
+    if (command == "snapshots") return runSnapshots();
+    if (command == "rollback") {
+        if (argc < 3) { std::cerr << "Usage: handler rollback <snapshot-id>\n"; return 2; }
+        return runRollback(argv[2]);
+    }
 
     if (command == "recover") {
         if (argc < 3) {
