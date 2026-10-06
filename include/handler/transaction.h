@@ -12,6 +12,8 @@ namespace handler {
 struct TransactionResult {
     bool committed{false};
     bool rolledBack{false};
+    bool snapshotCreated{false};
+    std::string snapshotId;
     std::string details;
 };
 
