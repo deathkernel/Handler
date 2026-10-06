@@ -1,6 +1,8 @@
 #include "handler/toolchain_doctor.h"
 #include "handler/action_engine.h"
 #include "handler/component_discovery.h"
+#include "handler/transaction.h"
+#include "handler/verification.h"
 #include <unordered_map>
 #include <algorithm>
 #include <cctype>
@@ -57,4 +59,58 @@ std::vector<ToolchainRepair> proposeToolchainRepairs(
     }
     return out;
 }
+}
+
+bool repairToolchain(const std::string& tool, std::string& details) {
+    // Only package-manager-owned, in-place upgrades with a deterministic
+    // package manager are eligible here. Missing runtimes are never installed
+    // automatically because their installer/source must be explicitly chosen.
+    std::string executable;
+    std::vector<std::string> args;
+    if (tool == "python") {
+#ifdef _WIN32
+        executable = "python";
+        args = {"-m", "pip", "install", "--upgrade", "pip"};
+#else
+        executable = "python";
+        args = {"-m", "pip", "install", "--upgrade", "pip"};
+#endif
+    } else if (tool == "node") {
+        details = "Node runtime repair requires an explicit installer/source; automatic repair is blocked";
+        return false;
+    } else if (tool == "git" || tool == "cmake" || tool == "dotnet") {
+        details = "runtime/tool repair requires an explicit installer/source; automatic repair is blocked";
+        return false;
+    } else {
+        details = "unsupported toolchain repair target";
+        return false;
+    }
+
+    Transaction tx(SafetyMode::Confirm);
+    const auto result = tx.run(
+        RiskLevel::High,
+        [&] {
+            CommandSpec action{"toolchain-repair", executable, args, RiskLevel::High, 180000};
+            const auto r = executeCommand(action);
+            details = r.output.empty() ? r.error : r.output;
+            return r.started && r.exitCode == 0;
+        },
+        [&] {
+            const auto findings = inspectToolchain({tool});
+            const auto it = findings.empty() ? findings.end() : findings.begin();
+            const bool ok = it != findings.end() && it->available &&
+                            it->status == "HEALTHY";
+            return VerificationResult{ok, "toolchain health check",
+                                      ok ? it->version : "post-repair health check failed"};
+        },
+        [&] {
+            details += " | rollback: no package-level downgrade is attempted; transaction snapshot retained";
+        });
+    if (!result.committed) {
+        details += " | transaction=" + result.details +
+                   " | snapshot=" + result.snapshotId;
+        return false;
+    }
+    details = "verified toolchain repair committed | snapshot=" + result.snapshotId;
+    return true;
 }
