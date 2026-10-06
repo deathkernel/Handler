@@ -5,6 +5,7 @@
 #include "handler/dependency_manager.h"
 #include "handler/transaction.h"
 #include "handler/verification.h"
+#include "handler/state_paths.h"
 
 #include <algorithm>
 #include <cctype>
@@ -107,12 +108,12 @@ bool directDependency(const std::filesystem::path& root,
 std::vector<ArtifactBackup> backupManifests(const UninstallPlan& plan,
                                             const std::filesystem::path& root) {
     std::vector<ArtifactBackup> backups;
-    const auto first = backupArtifact(plan.manifest, root / ".handler-uninstall-backup");
+    const auto first = backupArtifact(plan.manifest, root);
     if (first) backups.push_back(*first);
     if (plan.ecosystem == UninstallEcosystem::NodeJs) {
         const auto lock = plan.projectRoot / "package-lock.json";
         if (std::filesystem::is_regular_file(lock))
-            if (const auto b = backupArtifact(lock, root / ".handler-uninstall-backup"))
+            if (const auto b = backupArtifact(lock, root))
                 backups.push_back(*b);
     }
     return backups;
@@ -126,7 +127,8 @@ bool reinstall(const UninstallPlan& plan) {
                          plan.packageName + "==" + plan.installedVersion,
                          "--disable-pip-version-check"},
                         RiskLevel::High, 120000, plan.projectRoot};
-        return executeCommand(cmd).started && executeCommand(cmd).exitCode == 0;
+        const auto result = executeCommand(cmd);
+        return result.started && result.exitCode == 0;
     }
     CommandSpec cmd{"uninstall-rollback", "npm",
                     {"install", plan.packageName + "@" + plan.installedVersion,
@@ -198,7 +200,7 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
     if (!plan.allowed)
         return {false, false, plan.reason, {}};
 
-    const auto backups = backupManifests(plan, plan.projectRoot);
+    const auto backups = backupManifests(plan, handlerTransactionRoot() / "uninstall-backups");
     if (backups.empty())
         return {false, false, "manifest backup failed; uninstall refused", {}};
 
