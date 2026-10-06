@@ -391,7 +391,9 @@ int main(int argc, char* argv[]) {
             std::cerr << "Usage: handler repair python-module <package>\n";
             return 2;
         }
-        return handler::repairPythonModule(argv[3]);
+        if (std::string(argv[2]) == "python-module")
+            return handler::repairPythonModule(argv[3]);
+        return handler::repairNodeModule(argv[3]);
     }
 
     if (command == "temp-cleanup" && argc >= 3 &&
