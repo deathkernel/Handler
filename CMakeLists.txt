@@ -75,6 +75,8 @@ add_executable(handler_tests
     src/toolchain_doctor.cpp
     src/component_discovery.cpp
     src/action_engine.cpp
+    src/history.cpp
+    src/artifact_backup.cpp
     src/transaction.cpp
     src/recovery_journal.cpp
 )

@@ -1,4 +1,8 @@
 #include "handler/dependency_manager.h"
+#include "handler/action_engine.h"
+#include "handler/artifact_backup.h"
+#include "handler/history.h"
+#include "handler/transaction.h"
 
 #include <fstream>
 #include <iostream>
@@ -6,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <set>
+#include <sstream>
 
 namespace handler {
 
@@ -69,7 +74,6 @@ void printDependencies(const DependencyInfo& info) {
         std::cout << "  No dependency entries parsed by the current lightweight scanner.\n";
 }
 
-} // namespace handler
 
 std::vector<DependencyRequirement> parseDependencyRequirements(const DependencyInfo& info) {
     std::vector<DependencyRequirement> out;
@@ -87,14 +91,13 @@ std::vector<DependencyRequirement> parseDependencyRequirements(const DependencyI
 
 std::vector<DependencyConflict> findDependencyConflicts(
     const std::vector<DependencyRequirement>& requirements) {
-    std::unordered_map<std::string, std::string> seen;
+    std::unordered_map<std::string, std::vector<std::string>> grouped;
+    for (const auto& r : requirements) grouped[r.name].push_back(r.constraint);
     std::vector<DependencyConflict> out;
-    for (const auto& r : requirements) {
-        const auto it = seen.find(r.name);
-        if (it == seen.end()) { seen[r.name] = r.constraint; continue; }
-        if (it->second != r.constraint)
-            out.push_back({r.name, it->second, r.constraint,
-                           "multiple direct requirements impose different constraints"});
+    for (const auto& [name, constraints] : grouped) {
+        if (constraints.size() > 1 && !dependencyConstraintsCompatible(constraints))
+            out.push_back({name, constraints.front(), constraints.back(),
+                           "no version satisfies the combined constraints"});
     }
     return out;
 }
@@ -102,9 +105,13 @@ std::vector<DependencyConflict> findDependencyConflicts(
 std::vector<DependencyCandidate> proposeDependencyUpgrades(
     const std::vector<DependencyRequirement>& requirements) {
     std::vector<DependencyCandidate> out;
-    for (const auto& r : requirements)
-        out.push_back({r.name, "unknown", r.constraint, "REVIEW",
-                       "registry/current-version lookup required before changing the manifest"});
+    for (const auto& r : requirements) {
+        const bool compatible = dependencyConstraintsCompatible({r.constraint});
+        out.push_back({r.name, "unknown", r.constraint,
+                       compatible ? "REVIEW" : "BLOCKED",
+                       compatible ? "registry lookup required before changing the manifest"
+                                  : "constraint is internally unsatisfiable", {}, {}});
+    }
     return out;
 }
 
@@ -120,3 +127,190 @@ void printDependencyAnalysis(const std::vector<DependencyConflict>& conflicts,
         std::cout << "    [" << c.action << "] " << c.name
                   << " " << c.constraint << " | " << c.reason << "\n";
 }
+
+
+namespace {
+std::string depTrim(std::string s) {
+    const auto first=s.find_first_not_of(" \t\r\n");
+    if(first==std::string::npos) return {};
+    const auto last=s.find_last_not_of(" \t\r\n");
+    return s.substr(first,last-first+1);
+}
+bool depLess(const DependencyVersion& a,const DependencyVersion& b) {
+    if(a.major!=b.major) return a.major<b.major;
+    if(a.minor!=b.minor) return a.minor<b.minor;
+    return a.patch<b.patch;
+}
+bool depEqual(const DependencyVersion& a,const DependencyVersion& b) {
+    return a.major==b.major&&a.minor==b.minor&&a.patch==b.patch;
+}
+struct DepAtom { std::string op; DependencyVersion v; };
+std::vector<DepAtom> depAtoms(const std::string& raw) {
+    std::vector<DepAtom> out;
+    std::stringstream ss(depTrim(raw)); std::string part;
+    while(std::getline(ss,part,',')) {
+        part=depTrim(part); if(part.empty()||part=="*") continue;
+        std::string op;
+        if(part.rfind(">=",0)==0||part.rfind("<=",0)==0||part.rfind("==",0)==0||part.rfind("!=",0)==0) op=part.substr(0,2);
+        else if(part[0]=='>'||part[0]=='<'||part[0]=='='||part[0]=='^'||part[0]=='~') op=part.substr(0,1);
+        else op="==";
+        auto v=parseDependencyVersion(depTrim(part.substr(op=="=="&&part.rfind("==",0)!=0?0:op.size())));
+        if(v) out.push_back({op,*v});
+    }
+    return out;
+}
+bool depAtomMatches(const DependencyVersion& v,const DepAtom& a) {
+    if(a.op=="^") {
+        if(a.v.major>0) return v.major==a.v.major&&!depLess(v,a.v);
+        if(a.v.minor>0) return v.major==0&&v.minor==a.v.minor&&!depLess(v,a.v);
+        return v.major==0&&v.minor==0&&v.patch==a.v.patch;
+    }
+    if(a.op=="~") return v.major==a.v.major&&v.minor==a.v.minor&&!depLess(v,a.v);
+    if(a.op=="==") return depEqual(v,a.v);
+    if(a.op=="!=") return !depEqual(v,a.v);
+    if(a.op==">") return depLess(a.v,v);
+    if(a.op==">=") return !depLess(v,a.v);
+    if(a.op=="<") return depLess(v,a.v);
+    if(a.op=="<=") return !depLess(a.v,v);
+    return false;
+}
+bool validDependencyPackage(const std::string& p) {
+    if(p.empty()||p.size()>128) return false;
+    for(unsigned char ch:p)
+        if(!(std::isalnum(ch)||ch=='-'||ch=='_'||ch=='.'||ch=='@'||ch=='/')) return false;
+    return true;
+}
+std::filesystem::path dependencyStateRoot() {
+    if(const char* p=std::getenv("LOCALAPPDATA");p&&*p) return std::filesystem::path(p)/"Handler";
+    if(const char* p=std::getenv("USERPROFILE");p&&*p) return std::filesystem::path(p)/".handler";
+    return std::filesystem::current_path()/".handler";
+}
+std::vector<std::string> registryVersions(const std::string& ecosystem,const std::string& package,
+                                           const std::filesystem::path& root) {
+    CommandSpec cmd{"dependency-registry-query",ecosystem=="Python"?"python":"npm",{},RiskLevel::Low,45000};
+    if(ecosystem=="Python") cmd.arguments={"-m","pip","index","versions",package,"--disable-pip-version-check"};
+    else if(ecosystem=="Node.js") { cmd.arguments={"view",package,"versions","--json"}; cmd.workingDirectory=root; }
+    else return {};
+    const auto r=executeCommand(cmd);
+    if(!r.started||r.exitCode!=0) return {};
+    std::vector<std::string> out;
+    const std::regex re(R"((?:^|[^0-9])([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:[-+][0-9A-Za-z.-]+)?(?:$|[^0-9]))");
+    for(std::sregex_iterator it(r.output.begin(),r.output.end(),re),end;it!=end;++it) {
+        const auto v=(*it)[1].str();
+        if(std::find(out.begin(),out.end(),v)==out.end()) out.push_back(v);
+    }
+    return out;
+}
+std::string installedDependencyVersion(const std::string& ecosystem,const std::string& package,
+                                       const std::filesystem::path& root) {
+    CommandSpec cmd{"dependency-current-query",ecosystem=="Python"?"python":"npm",{},RiskLevel::Low,30000};
+    if(ecosystem=="Python") cmd.arguments={"-m","pip","show",package,"--disable-pip-version-check"};
+    else { cmd.arguments={"ls",package,"--depth=0","--json"}; cmd.workingDirectory=root; }
+    const auto r=executeCommand(cmd);
+    if(!r.started||r.exitCode!=0) return {};
+    std::smatch m;
+    if(ecosystem=="Python") {
+        const auto pos=r.output.find("Version:");
+        if(pos!=std::string::npos) {
+            const auto begin=pos+8;
+            const auto end=r.output.find_first_of("\r\n",begin);
+            return depTrim(r.output.substr(begin,end==std::string::npos?r.output.size()-begin:end-begin));
+        }
+    } else {
+        const std::regex re(R"DELIM("version"\s*:\s*"([^"]+)")DELIM");
+        if(std::regex_search(r.output,m,re)) return m[1].str();
+    }
+    return {};
+}
+}
+
+std::optional<DependencyVersion> parseDependencyVersion(const std::string& text) {
+    std::smatch m;
+    const std::regex re(R"(^\s*[v=]?([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?(?:[-+][0-9A-Za-z.-]+)?\s*$)");
+    if(!std::regex_match(text,m,re)) return std::nullopt;
+    return DependencyVersion{std::stoi(m[1].str()),m[2].matched?std::stoi(m[2].str()):0,
+                             m[3].matched?std::stoi(m[3].str()):0,text};
+}
+bool satisfiesDependencyConstraint(const DependencyVersion& v,const std::string& constraint) {
+    for(const auto& atom:depAtoms(constraint))
+        if(!depAtomMatches(v,atom)) return false;
+    return true;
+}
+bool dependencyConstraintsCompatible(const std::vector<std::string>& constraints) {
+    if(constraints.empty()) return false;
+    for(int major=0;major<=20;++major)
+        for(int minor=0;minor<=20;++minor)
+            for(int patch: {0,1,99}) {
+                auto v=parseDependencyVersion(std::to_string(major)+"."+std::to_string(minor)+"."+std::to_string(patch));
+                if(!v) continue;
+                bool ok=true;
+                for(const auto& c:constraints) ok=ok&&satisfiesDependencyConstraint(*v,c);
+                if(ok) return true;
+            }
+    return false;
+}
+std::optional<std::string> selectCompatibleDependencyVersion(
+    const std::vector<std::string>& constraints,const std::vector<std::string>& availableVersions) {
+    std::optional<DependencyVersion> best;
+    for(const auto& text:availableVersions) {
+        auto v=parseDependencyVersion(text); if(!v) continue;
+        bool ok=true;
+        for(const auto& c:constraints) ok=ok&&satisfiesDependencyConstraint(*v,c);
+        if(ok&&(!best||depLess(*best,*v))) best=*v;
+    }
+    return best?std::optional<std::string>(best->text):std::nullopt;
+}
+
+int upgradeDependency(const std::filesystem::path& projectRoot,const std::string& ecosystem,
+                      const std::string& package,const std::string& constraint) {
+    if(!validDependencyPackage(package)||(ecosystem!="Python"&&ecosystem!="Node.js")) {
+        std::cerr<<"Dependency upgrade blocked: unsupported package or ecosystem.\n"; return 3;
+    }
+    const auto versions=registryVersions(ecosystem,package,projectRoot);
+    const auto selected=selectCompatibleDependencyVersion({constraint},versions);
+    if(!selected) { std::cerr<<"No registry version satisfies "<<package<<" "<<constraint<<".\n"; return 4; }
+    const auto current=installedDependencyVersion(ecosystem,package,projectRoot);
+    if(!current.empty()) {
+        const auto cv=parseDependencyVersion(current); const auto sv=parseDependencyVersion(*selected);
+        if(cv&&sv&&!depLess(*cv,*sv)) { std::cout<<package<<" is already at a compatible version ("<<current<<").\n"; return 0; }
+    }
+    std::cout<<"Resolved upgrade: "<<package<<" "<<(current.empty()?"unknown":current)<<" -> "<<*selected<<" ["<<ecosystem<<"]\n"
+             <<"Apply this transactional upgrade? [y/N]: ";
+    std::string answer; std::getline(std::cin,answer);
+    if(answer!="y"&&answer!="Y") { std::cout<<"Dependency upgrade cancelled.\n"; return 2; }
+
+    const auto artifactRoot=dependencyStateRoot()/"transactions"/"artifacts"/"dependency-upgrade";
+    std::vector<ArtifactBackup> backups;
+    if(ecosystem=="Python")
+        for(const auto& file:{projectRoot/"requirements.txt",projectRoot/"pyproject.toml"})
+            if(auto b=backupArtifact(file,artifactRoot/"python")) backups.push_back(*b);
+    else
+        for(const auto& file:{projectRoot/"package.json",projectRoot/"package-lock.json"})
+            if(auto b=backupArtifact(file,artifactRoot/"node")) backups.push_back(*b);
+
+    Transaction tx(SafetyMode::Confirm);
+    const auto result=tx.runApproved(RiskLevel::High,
+        [&] {
+            CommandSpec cmd{"dependency-upgrade",ecosystem=="Python"?"python":"npm",{},RiskLevel::High,180000};
+            if(ecosystem=="Python") cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check"};
+            else { cmd.arguments={"install",package+"@"+*selected,"--no-audit","--no-fund"}; cmd.workingDirectory=projectRoot; }
+            const auto r=executeCommand(cmd); std::cout<<r.output; return r.started&&r.exitCode==0;
+        },
+        [&] {
+            const auto after=installedDependencyVersion(ecosystem,package,projectRoot);
+            const bool passed=after==*selected;
+            return VerificationResult{passed,"installed version == "+*selected,passed?"":"installed version was "+after};
+        },
+        [&] { for(const auto& backup:backups) (void)restoreArtifact(backup); });
+
+    History history(dependencyStateRoot()/"history.log");
+    if(!result.committed) {
+        history.record("DEPENDENCY_UPGRADE_FAILED",package+" | "+result.details+" | snapshot="+result.snapshotId);
+        std::cerr<<"Dependency upgrade did not commit: "<<result.details<<"\n"; return 1;
+    }
+    history.record("DEPENDENCY_UPGRADE_SUCCESS",package+" | "+*selected+" | snapshot="+result.snapshotId);
+    std::cout<<"Dependency upgrade verified and committed.\n";
+    return 0;
+}
+
+} // namespace handler
