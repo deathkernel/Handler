@@ -9,15 +9,65 @@
 
 namespace handler {
 namespace {
+struct WingetTarget {
+    const char* packageId;
+    const char* executable;
+};
+
+const WingetTarget* wingetTarget(const std::string& tool) {
+    static const std::unordered_map<std::string, WingetTarget> targets{
+        {"python", {"Python.Python.3", "python"}},
+        {"node", {"OpenJS.NodeJS", "node"}},
+        {"git", {"Git.Git", "git"}},
+        {"cmake", {"Kitware.CMake", "cmake"}},
+        {"dotnet", {"Microsoft.DotNet.SDK", "dotnet"}}
+    };
+    const auto it = targets.find(tool);
+    return it == targets.end() ? nullptr : &it->second;
+}
+
 std::string versionCommand(const std::string& tool) {
     if (tool == "npm") return "npm --version";
     return tool + " --version";
 }
+
 std::string firstLine(const std::string& text) {
     const auto p = text.find_first_of("\r\n");
     return text.substr(0, p == std::string::npos ? text.size() : p);
 }
+
+bool wingetAvailable() {
+#ifdef _WIN32
+    CommandSpec spec{"winget-version", "winget", {"--version"}, RiskLevel::Low, 15000};
+    const auto result = executeCommand(spec);
+    return result.started && result.exitCode == 0;
+#else
+    return false;
+#endif
 }
+
+bool verifyWingetSource(std::string& details) {
+#ifdef _WIN32
+    CommandSpec spec{"winget-source", "winget",
+                     {"source", "list"}, RiskLevel::Low, 30000};
+    const auto result = executeCommand(spec);
+    if (!result.started || result.exitCode != 0) {
+        details = result.error.empty() ? "winget source query failed" : result.error;
+        return false;
+    }
+    const auto output = result.output;
+    if (output.find("winget") == std::string::npos) {
+        details = "verified winget source was not reported by winget";
+        return false;
+    }
+    return true;
+#else
+    details = "winget repair is Windows-only";
+    return false;
+#endif
+}
+}
+
 std::vector<ToolchainFinding> inspectToolchain(const std::vector<std::string>& tools) {
     std::vector<ToolchainFinding> out;
     const auto discovered = discoverComponents(tools);
@@ -42,54 +92,74 @@ std::vector<ToolchainFinding> inspectToolchain(const std::vector<std::string>& t
     }
     return out;
 }
+
 std::vector<ToolchainRepair> proposeToolchainRepairs(
     const std::vector<ToolchainFinding>& findings) {
     std::vector<ToolchainRepair> out;
     for (const auto& f : findings) {
-        if (f.status == "HEALTHY") continue;
-        if (f.tool == "python" || f.tool == "node" || f.tool == "git" ||
-            f.tool == "cmake" || f.tool == "dotnet")
+        const auto* target = wingetTarget(f.tool);
+        if (f.status == "HEALTHY" && target) {
             out.push_back({f.tool, true,
-                           f.tool == "python" ? "python --version" :
-                           f.tool + " --version",
-                           f.status == "MISSING" ? "tool missing; installation source must be reviewed"
-                                                  : "tool version check failed"});
-        else
-            out.push_back({f.tool, false, {}, "automatic repair source is not defined"});
+                           std::string("winget upgrade --id ") + target->packageId + " --exact --source winget",
+                           "installed tool can be upgraded through the verified winget source",
+                           target->packageId});
+            continue;
+        }
+        if (f.status == "DEGRADED" && target) {
+            out.push_back({f.tool, true,
+                           std::string("winget upgrade --id ") + target->packageId + " --exact --source winget",
+                           "installed tool is unhealthy; in-place package repair is available",
+                           target->packageId});
+            continue;
+        }
+        if (f.status == "MISSING" && target) {
+            out.push_back({f.tool, false, {},
+                           "automatic installation of a missing runtime is blocked; explicit installation is required",
+                           target->packageId});
+            continue;
+        }
+        out.push_back({f.tool, false, {},
+                       "automatic repair source is not defined", {}});
     }
     return out;
 }
 
 bool repairToolchain(const std::string& tool, std::string& details) {
-    // Only package-manager-owned, in-place upgrades with a deterministic
-    // package manager are eligible here. Missing runtimes are never installed
-    // automatically because their installer/source must be explicitly chosen.
-    std::string executable;
-    std::vector<std::string> args;
-    if (tool == "python") {
-#ifdef _WIN32
-        executable = "python";
-        args = {"-m", "pip", "install", "--upgrade", "pip"};
-#else
-        executable = "python";
-        args = {"-m", "pip", "install", "--upgrade", "pip"};
-#endif
-    } else if (tool == "node") {
-        details = "Node runtime repair requires an explicit installer/source; automatic repair is blocked";
-        return false;
-    } else if (tool == "git" || tool == "cmake" || tool == "dotnet") {
-        details = "runtime/tool repair requires an explicit installer/source; automatic repair is blocked";
-        return false;
-    } else {
-        details = "unsupported toolchain repair target";
+    const auto* target = wingetTarget(tool);
+    if (!target) {
+        details = "automatic repair source is not defined for " + tool;
         return false;
     }
 
+#ifndef _WIN32
+    details = "winget toolchain repair is Windows-only";
+    return false;
+#else
+    const auto finding = inspectToolchain({tool});
+    if (finding.empty() || !finding.front().available) {
+        details = "toolchain repair requires an already installed runtime; missing tools need explicit installation";
+        return false;
+    }
+    if (!wingetAvailable()) {
+        details = "winget is not available on PATH";
+        return false;
+    }
+    if (!verifyWingetSource(details))
+        return false;
+
+    const std::string packageId = target->packageId;
     Transaction tx(SafetyMode::Confirm);
     const auto result = tx.run(
         RiskLevel::High,
         [&] {
-            CommandSpec action{"toolchain-repair", executable, args, RiskLevel::High, 180000};
+            CommandSpec action{
+                "toolchain-upgrade",
+                "winget",
+                {"upgrade", "--id", packageId, "--exact", "--source", "winget",
+                 "--accept-source-agreements", "--accept-package-agreements", "--silent"},
+                RiskLevel::High,
+                600000
+            };
             const auto r = executeCommand(action);
             details = r.output.empty() ? r.error : r.output;
             return r.started && r.exitCode == 0;
@@ -103,16 +173,17 @@ bool repairToolchain(const std::string& tool, std::string& details) {
                                       ok ? it->version : "post-repair health check failed"};
         },
         [&] {
-            details += " | rollback: no package-level downgrade is attempted; transaction snapshot retained";
+            details += " | rollback: package downgrade is not attempted; recovery snapshot retained";
         });
     if (!result.committed) {
         details += " | transaction=" + result.details +
                    " | snapshot=" + result.snapshotId;
         return false;
     }
-    details = "verified toolchain repair committed | snapshot=" + result.snapshotId;
+    details = "verified toolchain upgrade committed | package=" + packageId +
+              " | snapshot=" + result.snapshotId;
     return true;
-
+#endif
 }
 
 } // namespace handler
