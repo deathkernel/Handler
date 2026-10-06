@@ -126,7 +126,7 @@ int repairPythonModule(const char* rawPackage) {
             CommandSpec verify{"python-repair-verify", "python",
                 {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
             verify.executablePath = pythonPath;
-            const r = executeCommand(verify);
+            const auto r = executeCommand(verify);
             if (!r.started || r.exitCode != 0)
                 return VerificationResult{false, "pip show", r.error};
             CommandSpec consistency{"python-repair-consistency", "python",
