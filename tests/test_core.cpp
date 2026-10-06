@@ -51,6 +51,18 @@ int main() {
     assert(restoredText == "handler-batch-2");
     std::filesystem::remove_all(backupBase, testEc);
 
+    const auto discovered = discoverComponents({"python", "definitely-not-a-handler-tool"});
+    assert(discovered.size() <= 1);
+    for (const auto& component : discovered) {
+        assert(component.executable);
+        assert(!component.path.empty());
+        assert(std::filesystem::is_regular_file(component.path));
+    }
+
+    const auto systemHealth = inspectSystem();
+    assert(!systemHealth.pathAvailable || !systemHealth.pathValue.empty());
+    assert(systemHealth.tempAvailable);
+
     assert(isAllowedExecutable("python"));
     assert(isAllowedExecutable("dotnet"));
     assert(isAllowedExecutable("npm"));
