@@ -41,6 +41,7 @@ add_executable(handler
     src/deep_cleanup.cpp
     src/uninstall.cpp
     src/repair.cpp
+    src/auto_recovery.cpp
 )
 
 target_include_directories(handler PRIVATE include)
