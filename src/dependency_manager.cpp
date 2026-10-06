@@ -26,7 +26,7 @@ DependencyInfo inspectDependencies(const std::filesystem::path& root, const std:
     if (type == "Python" && std::filesystem::exists(root / "requirements.txt")) {
         info.manifest = "requirements.txt";
         collectSimpleLines(root / "requirements.txt", info.declared);
-    } else if (type == "Node.js") {
+    } else if (type == "Node.js" && std::filesystem::exists(root / "package.json")) {
         info.manifest = "package.json";
         std::ifstream input(root / "package.json");
         std::string line;
@@ -36,13 +36,13 @@ DependencyInfo inspectDependencies(const std::filesystem::path& root, const std:
             if (std::regex_search(line, match, dependencyLine))
                 info.declared.push_back(match[1].str() + " " + match[2].str());
         }
-    } else if (type == "Rust") {
+    } else if (type == "Rust" && std::filesystem::exists(root / "Cargo.toml")) {
         info.manifest = "Cargo.toml";
         collectSimpleLines(root / "Cargo.toml", info.declared);
-    } else if (type == "Go") {
+    } else if (type == "Go" && std::filesystem::exists(root / "go.mod")) {
         info.manifest = "go.mod";
         collectSimpleLines(root / "go.mod", info.declared);
-    } else if (type == "C/C++") {
+    } else if (type == "C/C++" && std::filesystem::exists(root / "CMakeLists.txt")) {
         info.manifest = "CMakeLists.txt";
     }
     return info;
@@ -50,18 +50,14 @@ DependencyInfo inspectDependencies(const std::filesystem::path& root, const std:
 
 void printDependencies(const DependencyInfo& info) {
     if (info.manifest.empty()) {
-        std::cout << "Dependency inspection: no supported manifest found.
-";
+        std::cout << "Dependency inspection: no supported manifest found.\n";
         return;
     }
     std::cout << "Dependency inspection [" << info.ecosystem << "] via "
-              << info.manifest << ":
-";
-    for (const auto& dep : info.declared) std::cout << "  " << dep << '
-';
+              << info.manifest << ":\n";
+    for (const auto& dep : info.declared) std::cout << "  " << dep << '\n';
     if (info.declared.empty())
-        std::cout << "  No dependency entries parsed by the current lightweight scanner.
-";
+        std::cout << "  No dependency entries parsed by the current lightweight scanner.\n";
 }
 
 } // namespace handler
