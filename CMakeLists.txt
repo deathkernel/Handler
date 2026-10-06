@@ -71,6 +71,9 @@ add_executable(handler_tests
     src/environment_state.cpp
     src/path_guardian.cpp
     src/environment_guardian.cpp
+    src/toolchain_doctor.cpp
+    src/component_discovery.cpp
+    src/action_engine.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
