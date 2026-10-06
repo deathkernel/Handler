@@ -3,7 +3,8 @@
 #include <chrono>
 #include <ctime>
 #include <fstream>
-#include <iomanip>\n#include <sstream>
+#include <iomanip>
+#include <sstream>
 
 namespace handler {
 
@@ -37,7 +38,8 @@ bool History::record(const std::string& event, const std::string& details) const
 
     out << nowUtc() << " | " << event;
     if (!details.empty()) out << " | " << details;
-    out << '\n';
+    out << '
+';
     return static_cast<bool>(out);
 }
 
