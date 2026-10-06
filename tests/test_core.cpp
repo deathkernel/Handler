@@ -10,6 +10,7 @@
 #include "handler/dependency_manager.h"
 #include "handler/artifact_backup.h"
 #include "handler/state_paths.h"
+#include "handler/transaction.h"
 
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
@@ -73,6 +74,22 @@ int main() {
     assert(!isAllowedExecutable("format"));
     assert(isAllowedExecutable("winget"));
     assert(classifyCommandRisk("winget", {"upgrade", "--id", "Git.Git"}) == RiskLevel::High);
+
+    Transaction rollbackTx(SafetyMode::Confirm);
+    const auto rollbackOk = rollbackTx.runApproved(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "not reached", ""}; },
+        [] { return true; });
+    assert(!rollbackOk.committed && rollbackOk.rolledBack);
+
+    Transaction rollbackFailTx(SafetyMode::Confirm);
+    const auto rollbackFail = rollbackFailTx.runApproved(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "not reached", ""}; },
+        [] { return false; });
+    assert(!rollbackFail.committed && !rollbackFail.rolledBack);
 
     const auto low = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
     assert(low.allowed && !low.requiresConfirmation);
