@@ -31,6 +31,7 @@ public:
 
 private:
     SafetyMode mode_;
+    bool preApproved_{false};
 };
 
 } // namespace handler
