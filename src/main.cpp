@@ -27,6 +27,7 @@
 #include "handler/verification.h"
 #include "handler/router.h"
 #include "handler/state_store.h"
+#include "handler/state_paths.h"
 #include "handler/system_info.h"
 #include "handler/temp_cleaner.h"
 #include "handler/repair.h"
@@ -44,11 +45,7 @@ namespace {
 constexpr const char* kVersion = "0.8.0";
 
 std::filesystem::path stateRoot() {
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        return std::filesystem::path(p) / "Handler";
-    if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        return std::filesystem::path(p) / ".handler";
-    return std::filesystem::current_path() / ".handler";
+    return handler::handlerStateRoot();
 }
 
 handler::History makeHistory() {
@@ -593,6 +590,25 @@ int runStatus() {
     return 0;
 }
 
+int runRecoveryLog() {
+    handler::RecoveryJournal journal(handler::handlerTransactionRoot() / "recovery.log");
+    const auto entries = journal.read();
+    if (entries.empty()) {
+        std::cout << "No recovery journal entries found.\n";
+        return 0;
+    }
+
+    std::cout << "Recovery journal (latest " << entries.size() << ")\n"
+              << "--------------------------------\n";
+    const std::size_t start = entries.size() > 50 ? entries.size() - 50 : 0;
+    for (std::size_t i = start; i < entries.size(); ++i) {
+        const auto& e = entries[i];
+        std::cout << e.timestampUtc << " | " << e.stage
+                  << " | " << e.details << '\n';
+    }
+    return 0;
+}
+
 int runHistory() {
     const auto file = stateRoot() / "history.log";
     std::ifstream in(file);
@@ -716,6 +732,7 @@ handler::ModuleRegistry buildModules() {
     registry.registerModule("state", runState);
     registry.registerModule("status", runStatus);
     registry.registerModule("history", runHistory);
+    registry.registerModule("recovery-log", runRecoveryLog);
     registry.registerModule("version", [] {
         std::cout << "Handler " << kVersion << "\n";
         return 0;
@@ -773,6 +790,7 @@ int main(int argc, char* argv[]) {
     }
     if (command == "safe-mode") return runSafeMode();
     if (command == "snapshots") return runSnapshots();
+    if (command == "recovery-log") return runRecoveryLog();
     if (command == "rollback") {
         if (argc < 3) { std::cerr << "Usage: handler rollback <snapshot-id>\n"; return 2; }
         return runRollback(argv[2]);

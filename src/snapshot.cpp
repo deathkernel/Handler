@@ -24,7 +24,14 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
     std::filesystem::create_directories(root_, ec);
     if (ec) return std::nullopt;
 
-    const std::string id = snapshotId();
+    const std::string baseId = snapshotId();
+    std::string id = baseId;
+    std::size_t suffix = 0;
+    std::error_code existsEc;
+    while (std::filesystem::exists(root_ / (id + ".state"), existsEc)) {
+        if (existsEc) return std::nullopt;
+        id = baseId + "-" + std::to_string(++suffix);
+    }
     const auto path = root_ / (id + ".state");
     std::ofstream out(path, std::ios::trunc);
     if (!out) return std::nullopt;

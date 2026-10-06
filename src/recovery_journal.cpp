@@ -4,6 +4,8 @@
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
+#include <utility>
 
 namespace handler {
 
@@ -28,6 +30,27 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
         << " | " << stage << " | " << details << '\n';
     return out.good();
+}
+
+std::vector<JournalEntry> RecoveryJournal::read() const {
+    std::vector<JournalEntry> entries;
+    std::ifstream in(file_);
+    if (!in) return entries;
+
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto first = line.find(" | ");
+        if (first == std::string::npos) continue;
+        const auto second = line.find(" | ", first + 3);
+        if (second == std::string::npos) continue;
+
+        entries.push_back({
+            line.substr(0, first),
+            line.substr(first + 3, second - first - 3),
+            line.substr(second + 3)
+        });
+    }
+    return entries;
 }
 
 } // namespace handler
