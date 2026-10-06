@@ -5,6 +5,7 @@
 #include "handler/policy.h"
 #include "handler/project_context.h"
 #include "handler/transaction.h"
+#include "handler/artifact_backup.h"
 #include "handler/verification.h"
 
 #include <cctype>
@@ -105,6 +106,13 @@ int repairPythonModule(const char* rawPackage) {
     }
 
     Transaction tx(SafetyMode::Confirm);
+    const auto artifactRoot = repairStateRoot() / "transactions" / "artifacts";
+    std::vector<ArtifactBackup> backups;
+    for (const auto& file : {std::filesystem::path("requirements.txt"),
+                             std::filesystem::path("pyproject.toml")}) {
+        const auto backup = backupArtifact(file, artifactRoot / "python");
+        if (backup) backups.push_back(*backup);
+    }
     const auto result = tx.runApproved(
         RiskLevel::High,
         [&] {
@@ -125,6 +133,7 @@ int repairPythonModule(const char* rawPackage) {
                                       "pip show", r.error};
         },
         [&] {
+            for (const auto& backup : backups) (void)restoreArtifact(backup);
             if (wasInstalled) return;
             CommandSpec rollback{"python-repair-rollback", "python",
                 {"-m", "pip", "uninstall", "-y", package,
@@ -182,6 +191,12 @@ int repairNodeModule(const char* rawPackage) {
     }
 
     Transaction tx(SafetyMode::Confirm);
+    const auto artifactRoot = repairStateRoot() / "transactions" / "artifacts";
+    std::vector<ArtifactBackup> backups;
+    for (const auto& file : {projectRoot / "package.json", projectRoot / "package-lock.json"}) {
+        const auto backup = backupArtifact(file, artifactRoot / "node");
+        if (backup) backups.push_back(*backup);
+    }
     const auto result = tx.runApproved(
         RiskLevel::High,
         [&] {
