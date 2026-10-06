@@ -3,6 +3,7 @@
 #include "handler/component_discovery.h"
 #include "handler/transaction.h"
 #include "handler/verification.h"
+#include "handler/transaction.h"
 #include <unordered_map>
 #include <algorithm>
 #include <cctype>
