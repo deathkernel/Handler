@@ -69,6 +69,15 @@ int runUpdates() {
     return 0;
 }
 
+std::string joinArguments(int argc, char* argv[], int start) {
+    std::string result;
+    for (int i = start; i < argc; ++i) {
+        if (!result.empty()) result += ' ';
+        result += argv[i];
+    }
+    return result;
+}
+
 int runRisk(const std::string& line) {
     const auto r = handler::inspectCommandRisk(line);
     const char* label = r.risk == handler::CommandRisk::Safe ? "SAFE"
@@ -383,7 +392,7 @@ int main(int argc, char* argv[]) {
     if (command == "updates") return runUpdates();
     if (command == "risk") {
         if (argc < 3) return 2;
-        return runRisk(argv[2]);
+        return runRisk(joinArguments(argc, argv, 2));
     }
     if (command == "safe-mode") return runSafeMode();
 
@@ -409,7 +418,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "Usage: handler decide <error text>\n";
             return 2;
         }
-        return runDecide(argv[2]);
+        return runDecide(joinArguments(argc, argv, 2));
     }
 
     if (command == "command") {
@@ -428,7 +437,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "Usage: handler detect-error <error text>\n";
             return 2;
         }
-        return runErrorDetect(argv[2]);
+        return runErrorDetect(joinArguments(argc, argv, 2));
     }
 
     if (command == "discover") {
