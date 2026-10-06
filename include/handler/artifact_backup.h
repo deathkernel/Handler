@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 
@@ -9,6 +10,8 @@ struct ArtifactBackup {
     std::filesystem::path original;
     std::filesystem::path backup;
     bool existed{false};
+    std::uintmax_t originalSize{0};
+    std::uintmax_t backupSize{0};
 };
 
 std::optional<ArtifactBackup> backupArtifact(
