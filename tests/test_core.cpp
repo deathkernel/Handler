@@ -8,9 +8,12 @@
 #include "handler/environment_guardian.h"
 #include "handler/toolchain_doctor.h"
 #include "handler/dependency_manager.h"
+#include "handler/artifact_backup.h"
+#include "handler/state_paths.h"
 
 #include <cassert>
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 
 int main() {
@@ -19,6 +22,34 @@ int main() {
     assert(quoteArgument("plain") == "plain");
     assert(quoteArgument("hello world") == "\"hello world\"");
     assert(quoteArgument("a\\b c") == "\"a\\\\b c\"");
+
+    const auto stateRoot = handlerStateRoot();
+    const auto transactionRoot = handlerTransactionRoot();
+    assert(transactionRoot == stateRoot / "transactions");
+
+    const auto backupBase = std::filesystem::temp_directory_path() / "handler-batch2-test";
+    std::error_code testEc;
+    std::filesystem::remove_all(backupBase, testEc);
+    std::filesystem::create_directories(backupBase, testEc);
+    assert(!testEc);
+    const auto original = backupBase / "manifest.txt";
+    {
+        std::ofstream out(original);
+        out << "handler-batch-2";
+    }
+    const auto backup = backupArtifact(original, backupBase / "backups");
+    assert(backup.has_value());
+    assert(backup->existed && backup->originalSize == backup->backupSize);
+    {
+        std::ofstream out(original, std::ios::trunc);
+        out << "corrupted";
+    }
+    assert(restoreArtifact(*backup));
+    std::ifstream restored(original);
+    std::string restoredText;
+    std::getline(restored, restoredText);
+    assert(restoredText == "handler-batch-2");
+    std::filesystem::remove_all(backupBase, testEc);
 
     assert(isAllowedExecutable("python"));
     assert(isAllowedExecutable("dotnet"));

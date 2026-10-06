@@ -739,6 +739,19 @@ Batch 1 adds the first production-oriented dependency intelligence layer:
 
 The solver is intentionally deterministic and conservative. It does not silently upgrade packages, and registry-backed changes remain confirmation-gated. Full ecosystem-specific lockfile solving and installer support for Rust/Go/C++ remain later work.
 
+
+## Batch 2 — Recovery & Repair Hardening
+
+Batch 2 strengthens the recovery foundation without broadening Handler into an unrestricted system cleaner:
+
+- **Centralized Handler state/recovery roots** prevent transaction, repair, and dependency workflows from drifting to different storage locations.
+- **Artifact backup integrity metadata** records original/backup sizes and validates the backup before restoring it.
+- **Explicit repair cancellation semantics** use exit code `2` instead of reporting a cancelled repair as success.
+- **Stronger Python repair verification** now requires both package visibility and `pip check` consistency before a repair commits.
+- Regression coverage now exercises the shared state root and artifact restoration path.
+
+The recovery layer still does not claim full filesystem rollback. Snapshots capture Handler environment state, while artifact backups cover only files explicitly registered by a transaction.
+
 ## Project Status
 
 🚧 **Level 6 — Maintenance & Advanced Operations Foundation Implemented**

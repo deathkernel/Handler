@@ -1,6 +1,7 @@
 #include "handler/transaction.h"
 
 #include "handler/environment_state.h"
+#include "handler/state_paths.h"
 #include "handler/recovery_journal.h"
 #include <cstdlib>
 
@@ -19,13 +20,7 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
     if (!action || !verify)
         return {false, false, false, {}, "invalid transaction callbacks"};
 
-    std::filesystem::path root;
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        root = std::filesystem::path(p) / "Handler" / "transactions";
-    else if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        root = std::filesystem::path(p) / ".handler" / "transactions";
-    else
-        root = std::filesystem::current_path() / ".handler" / "transactions";
+    const auto root = handlerTransactionRoot();
     RecoveryJournal journal(root / "recovery.log");
     journal.record("START", "transaction started");
 

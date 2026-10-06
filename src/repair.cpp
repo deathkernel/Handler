@@ -7,6 +7,7 @@
 #include "handler/transaction.h"
 #include "handler/artifact_backup.h"
 #include "handler/verification.h"
+#include "handler/state_paths.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -31,11 +32,7 @@ bool validPackageName(const std::string& package) {
 }
 
 std::filesystem::path repairStateRoot() {
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        return std::filesystem::path(p) / "Handler";
-    if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        return std::filesystem::path(p) / ".handler";
-    return std::filesystem::current_path() / ".handler";
+    return handlerStateRoot();
 }
 
 std::filesystem::path pythonExecutableForCurrentContext() {
@@ -102,7 +99,7 @@ int repairPythonModule(const char* rawPackage) {
         std::getline(std::cin, answer);
         if (answer != "y" && answer != "Y") {
             std::cout << "Repair cancelled.\n";
-            return 0;
+            return kRepairCancelled;
         }
     }
 
@@ -130,8 +127,15 @@ int repairPythonModule(const char* rawPackage) {
                 {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
             verify.executablePath = pythonPath;
             const auto r = executeCommand(verify);
-            return VerificationResult{r.started && r.exitCode == 0,
-                                      "pip show", r.error};
+            if (!r.started || r.exitCode != 0)
+                return VerificationResult{false, "pip show", r.error};
+            CommandSpec consistency{"python-repair-consistency", "python",
+                {"-m", "pip", "check"}, RiskLevel::Low, 30000};
+            consistency.executablePath = pythonPath;
+            const auto check = executeCommand(consistency);
+            return VerificationResult{check.started && check.exitCode == 0,
+                                      "pip show + pip check",
+                                      check.exitCode == 0 ? "" : check.error};
         },
         [&] {
             for (const auto& backup : backups) (void)restoreArtifact(backup);
@@ -187,7 +191,7 @@ int repairNodeModule(const char* rawPackage) {
         std::getline(std::cin, answer);
         if (answer != "y" && answer != "Y") {
             std::cout << "Repair cancelled.\n";
-            return 0;
+            return kRepairCancelled;
         }
     }
 
