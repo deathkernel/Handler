@@ -138,13 +138,15 @@ int repairPythonModule(const char* rawPackage) {
                                       check.exitCode == 0 ? "" : check.error};
         },
         [&] {
-            for (const auto& backup : backups) (void)restoreArtifact(backup);
-            if (wasInstalled) return;
+            bool restored = true;
+            for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
+            if (wasInstalled) return restored;
             CommandSpec rollback{"python-repair-rollback", "python",
                 {"-m", "pip", "uninstall", "-y", package,
                  "--disable-pip-version-check"}, RiskLevel::High, 120000};
             rollback.executablePath = pythonPath;
-            (void)executeCommand(rollback);
+            const auto result = executeCommand(rollback);
+            return restored && result.started && result.exitCode == 0;
         });
 
     History history(repairStateRoot() / "history.log");
@@ -222,13 +224,15 @@ int repairNodeModule(const char* rawPackage) {
                                       "npm ls", r.error};
         },
         [&] {
-            for (const auto& backup : backups) (void)restoreArtifact(backup);
-            if (wasInstalled) return;
+            bool restored = true;
+            for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
+            if (wasInstalled) return restored;
             CommandSpec rollback{"node-repair-rollback", "npm",
                 {"uninstall", package, "--no-audit", "--no-fund"},
                 RiskLevel::High, 120000};
             rollback.workingDirectory = projectRoot;
-            (void)executeCommand(rollback);
+            const auto result = executeCommand(rollback);
+            return restored && result.started && result.exitCode == 0;
         });
 
     History history(repairStateRoot() / "history.log");
