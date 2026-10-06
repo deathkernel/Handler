@@ -1,10 +1,10 @@
 #include "handler/snapshot.h"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
-#include <sstream>
+#include <string>
 #include <utility>
-#include <algorithm>
 
 namespace handler {
 
@@ -15,7 +15,15 @@ std::string snapshotId() {
         now.time_since_epoch()).count();
     return std::to_string(stamp);
 }
+
+bool validSnapshotId(const std::string& id) {
+    if (id.empty() || id.size() > 64) return false;
+    for (const char ch : id) {
+        if (ch < '0' || ch > '9') return false;
+    }
+    return true;
 }
+} // namespace
 
 SnapshotStore::SnapshotStore(std::filesystem::path root) : root_(std::move(root)) {}
 
@@ -24,8 +32,21 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
     std::filesystem::create_directories(root_, ec);
     if (ec) return std::nullopt;
 
-    const std::string id = snapshotId();
-    const auto path = root_ / (id + ".state");
+    std::string id = snapshotId();
+    std::filesystem::path path;
+    for (std::size_t suffix = 0;; ++suffix) {
+        const std::string candidate = suffix == 0
+            ? id
+            : id + "-" + std::to_string(suffix);
+        path = root_ / (candidate + ".state");
+        std::error_code existsEc;
+        if (!std::filesystem::exists(path, existsEc)) {
+            if (existsEc) return std::nullopt;
+            id = candidate;
+            break;
+        }
+    }
+
     std::ofstream out(path, std::ios::trunc);
     if (!out) return std::nullopt;
 
@@ -42,7 +63,16 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
 }
 
 std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot) const {
-    std::ifstream in(snapshot.path);
+    if (!validSnapshotId(snapshot.id)) return std::nullopt;
+
+    const auto expected = root_ / (snapshot.id + ".state");
+    std::error_code ec;
+    const auto canonicalRoot = std::filesystem::weakly_canonical(root_, ec);
+    if (ec) return std::nullopt;
+    const auto canonicalPath = std::filesystem::weakly_canonical(snapshot.path, ec);
+    if (ec || canonicalPath.parent_path() != canonicalRoot) return std::nullopt;
+
+    std::ifstream in(canonicalPath);
     if (!in) return std::nullopt;
 
     EnvironmentState state;
@@ -79,7 +109,7 @@ std::vector<SnapshotInfo> SnapshotStore::list() const {
 }
 
 std::optional<SnapshotInfo> SnapshotStore::find(const std::string& id) const {
-    if (id.empty()) return std::nullopt;
+    if (!validSnapshotId(id)) return std::nullopt;
     const auto path = root_ / (id + ".state");
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec)) return std::nullopt;
