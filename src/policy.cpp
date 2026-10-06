@@ -3,11 +3,15 @@
 namespace handler {
 
 PolicyDecision evaluatePolicy(SafetyMode mode, RiskLevel risk) {
-    if (mode == SafetyMode::Auto)
-        return {risk == RiskLevel::Low, false, risk == RiskLevel::Low ? "low-risk action allowed" : "confirmation required for this risk"};
+    if (mode == SafetyMode::Auto) {
+        if (risk == RiskLevel::Low) return {true, false, "low-risk action allowed automatically"};
+        return {false, true, "risk level requires explicit confirmation"};
+    }
 
-    if (mode == SafetyMode::Confirm)
-        return {risk == RiskLevel::Low, risk != RiskLevel::Low, risk == RiskLevel::Low ? "low-risk action allowed" : "user confirmation required"};
+    if (mode == SafetyMode::Confirm) {
+        if (risk == RiskLevel::Low) return {true, false, "low-risk action allowed"};
+        return {false, true, "user confirmation required before execution"};
+    }
 
     return {false, true, "strict mode requires explicit confirmation"};
 }
