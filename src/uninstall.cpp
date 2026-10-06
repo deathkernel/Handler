@@ -46,6 +46,22 @@ std::filesystem::path pythonExecutable(const std::filesystem::path& root) {
 #endif
 }
 
+bool hasProjectVirtualEnv(const std::filesystem::path& root) {
+    std::error_code ec;
+#ifdef _WIN32
+    return std::filesystem::is_regular_file(root / ".venv" / "Scripts" / "python.exe", ec) ||
+           std::filesystem::is_regular_file(root / "venv" / "Scripts" / "python.exe", ec);
+#else
+    return std::filesystem::is_regular_file(root / ".venv" / "bin" / "python", ec) ||
+           std::filesystem::is_regular_file(root / "venv" / "bin" / "python", ec);
+#endif
+}
+
+bool hasProjectNodeModules(const std::filesystem::path& root) {
+    std::error_code ec;
+    return std::filesystem::is_directory(root / "node_modules", ec);
+}
+
 std::string normalizePackage(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) {
@@ -168,6 +184,15 @@ UninstallPlan planUninstall(const std::filesystem::path& projectRoot,
 
     const std::string ecosystemName =
         ecosystem == UninstallEcosystem::Python ? "Python" : "Node.js";
+
+    if (ecosystem == UninstallEcosystem::Python && !hasProjectVirtualEnv(root)) {
+        plan.reason = "Python uninstall requires a project-local .venv or venv; global interpreter removal is blocked";
+        return plan;
+    }
+    if (ecosystem == UninstallEcosystem::NodeJs && !hasProjectNodeModules(root)) {
+        plan.reason = "Node.js uninstall requires project-local node_modules; global package removal is blocked";
+        return plan;
+    }
     const std::string manifestName =
         ecosystem == UninstallEcosystem::Python ? "requirements.txt" : "package.json";
     plan.manifest = root / manifestName;
@@ -243,13 +268,19 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
             bool restored = true;
             for (const auto& backup : backups)
                 restored = restoreArtifact(backup) && restored;
-            if (!reinstall(plan)) restored = false;
-            (void)restored;
+            if (restored) restored = reinstall(plan);
+            return restored;
         });
 
-    if (!result.committed)
-        return {false, result.rolledBack, result.details, result.snapshotId};
-    return {true, false, "package uninstalled and verified; manifest changes backed up", result.snapshotId};
+    if (!result.committed) {
+        const bool rollbackVerified = result.rolledBack;
+        return {false, result.rolledBack,
+                result.rolledBack ? "uninstall failed; rollback completed and was recorded"
+                                  : "uninstall failed; rollback could not be verified",
+                result.snapshotId, rollbackVerified, true};
+    }
+    return {true, false, "package uninstalled and verified; recovery artifacts retained",
+            result.snapshotId, false, false};
 }
 
 } // namespace handler
