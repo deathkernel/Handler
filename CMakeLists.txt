@@ -82,6 +82,7 @@ add_executable(handler_tests
     src/system_info.cpp
     src/transaction.cpp
     src/recovery_journal.cpp
+    src/uninstall.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
