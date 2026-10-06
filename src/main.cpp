@@ -199,6 +199,7 @@ void printUsage() {
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler repair python-module <package> Repair a Python module safely\n"
+        << "  handler repair node-module <package>   Repair a Node module in the detected project\n"
         << "  handler safe-mode              Prepare isolated sandbox context\n"
         << "  handler modules                Show registered modules\n"
         << "  handler version                Show Handler version\n"
@@ -387,13 +388,16 @@ int main(int argc, char* argv[]) {
     if (command == "safe-mode") return runSafeMode();
 
     if (command == "repair") {
-        if (argc < 4 || std::string(argv[2]) != "python-module") {
-            std::cerr << "Usage: handler repair python-module <package>\n";
+        if (argc < 4) {
+            std::cerr << "Usage: handler repair <python-module|node-module> <package>\n";
             return 2;
         }
         if (std::string(argv[2]) == "python-module")
             return handler::repairPythonModule(argv[3]);
-        return handler::repairNodeModule(argv[3]);
+        if (std::string(argv[2]) == "node-module")
+            return handler::repairNodeModule(argv[3]);
+        std::cerr << "Unknown repair target: " << argv[2] << "\n";
+        return 2;
     }
 
     if (command == "temp-cleanup" && argc >= 3 &&
