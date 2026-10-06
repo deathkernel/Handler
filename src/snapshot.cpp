@@ -28,7 +28,7 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
     std::ofstream out(path, std::ios::trunc);
     if (!out) return std::nullopt;
 
-    out << "timestamp=" << state.timestamp << '\n'
+    out << "timestamp=" << state.timestampUtc << '\n'
         << "computer_name=" << state.computerName << '\n'
         << "user_name=" << state.userName << '\n'
         << "temp_path=" << state.tempPath << '\n'
@@ -51,7 +51,7 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
         if (pos == std::string::npos) continue;
         const auto key = line.substr(0, pos);
         const auto value = line.substr(pos + 1);
-        if (key == "timestamp") state.timestamp = value;
+        if (key == "timestamp") state.timestampUtc = value;
         else if (key == "computer_name") state.computerName = value;
         else if (key == "user_name") state.userName = value;
         else if (key == "temp_path") state.tempPath = value;
