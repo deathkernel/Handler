@@ -269,6 +269,21 @@ int runTempCleanup(bool dryRun = false) {
         return 1;
     }
 
+    if (!dryRun) {
+        const auto policy = handler::evaluatePolicy(
+            handler::SafetyMode::Confirm, handler::RiskLevel::High);
+        if (policy.requiresConfirmation) {
+            std::cout << "TEMP cleanup will remove eligible entries older than 24 hours. [y/N]: ";
+            std::string answer;
+            std::getline(std::cin, answer);
+            if (answer != "y" && answer != "Y") {
+                std::cout << "TEMP cleanup cancelled.\n";
+                makeHistory().record("TEMP_CLEANUP_CANCELLED");
+                return 0;
+            }
+        }
+    }
+
     std::cout << (dryRun ? "Previewing: " : "Cleaning: ")
               << health.tempPath << "\n";
     const auto result = handler::cleanTempDirectory(
