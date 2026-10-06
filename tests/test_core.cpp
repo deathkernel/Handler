@@ -7,6 +7,7 @@
 #include "handler/path_guardian.h"
 #include "handler/environment_guardian.h"
 #include "handler/toolchain_doctor.h"
+#include "handler/dependency_manager.h"
 
 #include <cassert>
 #include <iostream>
@@ -38,6 +39,18 @@ int main() {
 
     const auto errors = detectErrors("ModuleNotFoundError: No module named 'requests'");
     assert(!errors.empty());
+
+    DependencyInfo depInfo;
+    depInfo.ecosystem = "Python";
+    depInfo.manifest = "requirements.txt";
+    depInfo.declared = {"requests>=2.0", "flask==3.0", "requests<3.0"};
+    const auto requirements = parseDependencyRequirements(depInfo);
+    assert(requirements.size() == 3);
+    const auto conflicts = findDependencyConflicts(requirements);
+    assert(conflicts.size() == 1);
+    assert(conflicts[0].name == "requests");
+    const auto upgradeCandidates = proposeDependencyUpgrades(requirements);
+    assert(upgradeCandidates.size() == 3);
 
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
