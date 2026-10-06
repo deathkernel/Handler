@@ -260,17 +260,38 @@ ActionResult executeCommand(const CommandSpec& command) {
             return {false, -1, {}, "working directory does not exist"};
     }
 
+    int outputPipe[2]{};
+    if (pipe(outputPipe) != 0)
+        return {false, -1, {}, "failed to create output pipe"};
+
     const pid_t child = fork();
-    if (child < 0) return {false, -1, {}, "failed to fork command process"};
+    if (child < 0) {
+        close(outputPipe[0]);
+        close(outputPipe[1]);
+        return {false, -1, {}, "failed to fork command process"};
+    }
 
     if (child == 0) {
+        close(outputPipe[0]);
         if (!command.workingDirectory.empty())
             (void)chdir(command.workingDirectory.c_str());
+        dup2(outputPipe[1], STDOUT_FILENO);
+        dup2(outputPipe[1], STDERR_FILENO);
+        close(outputPipe[1]);
 
-        const std::string line = buildShellCommand(command) + " 2>&1";
+        const std::string line = buildShellCommand(command);
         execl("/bin/sh", "sh", "-c", line.c_str(), static_cast<char*>(nullptr));
         _exit(127);
     }
+
+    close(outputPipe[1]);
+    std::string output;
+    std::thread reader([&] {
+        std::array<char, 4096> buffer{};
+        ssize_t count = 0;
+        while ((count = read(outputPipe[0], buffer.data(), buffer.size())) > 0)
+            output.append(buffer.data(), static_cast<std::size_t>(count));
+    });
 
     const auto timeout = std::chrono::milliseconds(
         command.timeoutMs == 0 ? 120000 : command.timeoutMs);
@@ -280,11 +301,18 @@ ActionResult executeCommand(const CommandSpec& command) {
         int status = 0;
         const pid_t result = waitpid(child, &status, WNOHANG);
         if (result == child) {
+            if (reader.joinable()) reader.join();
+            close(outputPipe[0]);
             const int code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
-            return {true, code, {}, code == 0 ? std::string{} : "command failed"};
+            return {true, code, output, code == 0 ? std::string{} : output};
         }
-        if (result < 0)
-            return {true, -1, {}, "failed to wait for command"};
+        if (result < 0) {
+            kill(child, SIGKILL);
+            waitpid(child, &status, 0);
+            if (reader.joinable()) reader.join();
+            close(outputPipe[0]);
+            return {true, -1, output, "failed to wait for command"};
+        }
 
         if (std::chrono::steady_clock::now() >= deadline) {
             kill(child, SIGTERM);
@@ -294,7 +322,9 @@ ActionResult executeCommand(const CommandSpec& command) {
                 kill(child, SIGKILL);
                 waitpid(child, &finalStatus, 0);
             }
-            return {true, 124, {}, "command timed out and was terminated"};
+            if (reader.joinable()) reader.join();
+            close(outputPipe[0]);
+            return {true, 124, output, "command timed out and was terminated"};
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
