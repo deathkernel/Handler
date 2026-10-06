@@ -1,7 +1,8 @@
 #pragma once
 
 #include <cstddef>
-#include <filesystem>\n#include <cstdint>
+#include <filesystem>
+#include <cstdint>
 
 namespace handler {
 
