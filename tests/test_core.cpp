@@ -10,18 +10,22 @@
 #include "handler/dependency_manager.h"
 #include "handler/artifact_backup.h"
 #include "handler/state_paths.h"
+#include "handler/temp_cleaner.h"
+#include "handler/transaction.h"
 
 #include <cassert>
-#include <iostream>
-#include <fstream>
+#include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 int main() {
     using namespace handler;
 
     assert(quoteArgument("plain") == "plain");
-    assert(quoteArgument("hello world") == "\"hello world\"");
-    assert(quoteArgument("a\\b c") == "\"a\\\\b c\"");
+    assert(quoteArgument("hello world") == ""hello world"");
+    assert(quoteArgument("a\\b c") == ""a\\\\b c"");
 
     const auto stateRoot = handlerStateRoot();
     const auto transactionRoot = handlerTransactionRoot();
@@ -68,7 +72,6 @@ int main() {
     assert(safeRisk == RiskLevel::Low);
     const auto installRisk = classifyCommandRisk("npm", {"install", "express"});
     assert(installRisk == RiskLevel::High);
-
 
     const auto errors = detectErrors("ModuleNotFoundError: No module named 'requests'");
     assert(!errors.empty());
@@ -122,13 +125,64 @@ int main() {
     state.timestampUtc = "test";
     state.computerName = "machine";
     state.userName = "user";
-    state.handlerVersion = "0.7.0";
+    state.handlerVersion = "0.8.0";
     const auto snapshot = snapshots.create(state);
     assert(snapshot.has_value());
     assert(snapshots.find(snapshot->id).has_value());
     assert(snapshots.load(*snapshot).has_value());
-    assert(snapshots.list().size() == 1);
+    assert(!snapshots.find("../outside").has_value());
+    assert(!snapshots.find("abc").has_value());
+    SnapshotInfo traversal{"../outside", tempRoot / ".." / "outside.state"};
+    assert(!snapshots.load(traversal).has_value());
     std::filesystem::remove_all(tempRoot, ec);
+
+    const auto transactionRootForTest = std::filesystem::temp_directory_path() / "handler_transaction_test";
+    std::filesystem::remove_all(transactionRootForTest, ec);
+
+    bool rollbackCalled = false;
+    Transaction failedAction(SafetyMode::Auto);
+    const auto actionFailure = failedAction.run(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [&] { rollbackCalled = true; });
+    assert(!actionFailure.committed);
+    assert(actionFailure.rolledBack);
+    assert(rollbackCalled);
+
+    rollbackCalled = false;
+    Transaction failedVerification(SafetyMode::Auto);
+    const auto verificationFailure = failedVerification.run(
+        RiskLevel::Low,
+        [] { return true; },
+        [] { return VerificationResult{false, "integration test", "forced failure"}; },
+        [&] { rollbackCalled = true; });
+    assert(!verificationFailure.committed);
+    assert(verificationFailure.rolledBack);
+    assert(rollbackCalled);
+
+    const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
+    std::filesystem::remove_all(cleanupRoot, ec);
+    std::filesystem::create_directories(cleanupRoot, ec);
+    const auto oldFile = cleanupRoot / "old.txt";
+    const auto recentFile = cleanupRoot / "recent.txt";
+    { std::ofstream(oldFile) << "old"; }
+    { std::ofstream(recentFile) << "recent"; }
+    std::filesystem::last_write_time(
+        oldFile, std::filesystem::file_time_type::clock::now() - std::chrono::hours(48), ec);
+    assert(!ec);
+
+    const auto dryRun = cleanTempDirectory(cleanupRoot, true);
+    assert(dryRun.dryRun);
+    assert(dryRun.candidates == 1);
+    assert(std::filesystem::exists(oldFile));
+    assert(std::filesystem::exists(recentFile));
+
+    const auto cleaned = cleanTempDirectory(cleanupRoot, false);
+    assert(cleaned.filesRemoved == 1);
+    assert(!std::filesystem::exists(oldFile));
+    assert(std::filesystem::exists(recentFile));
+    std::filesystem::remove_all(cleanupRoot, ec);
 
     const auto pathRoot = std::filesystem::temp_directory_path() / "handler_path_test";
     std::filesystem::remove_all(pathRoot, ec);
