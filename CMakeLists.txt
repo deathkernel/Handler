@@ -64,6 +64,7 @@ add_executable(handler_tests
     tests/test_core.cpp
     src/error_detection.cpp
     src/dependency_graph.cpp
+    src/dependency_manager.cpp
     src/policy.cpp
     src/command_engine.cpp
     src/risky_command.cpp
@@ -74,6 +75,8 @@ add_executable(handler_tests
     src/toolchain_doctor.cpp
     src/component_discovery.cpp
     src/action_engine.cpp
+    src/transaction.cpp
+    src/recovery_journal.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
