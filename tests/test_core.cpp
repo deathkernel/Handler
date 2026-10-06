@@ -13,6 +13,7 @@
 
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
+#include "handler/uninstall.h"
 
 #include <cassert>
 #include <iostream>
@@ -185,6 +186,24 @@ int main() {
     assert(!repairToolchain("python", repairDetails));
     assert(repairDetails.find("not enabled") != std::string::npos);
 #endif
+
+    const auto uninstallRoot = std::filesystem::temp_directory_path() / "handler_uninstall_test";
+    std::filesystem::remove_all(uninstallRoot, ec);
+    std::filesystem::create_directories(uninstallRoot);
+    {
+        std::ofstream manifest(uninstallRoot / "requirements.txt");
+        manifest << "requests>=2.0\n";
+    }
+    const auto blockedPlan = planUninstall(
+        uninstallRoot, UninstallEcosystem::Python, "requests");
+    assert(blockedPlan.allowed == false);
+    assert(blockedPlan.reason.find("not currently installed") != std::string::npos ||
+           blockedPlan.reason.find("not a direct") != std::string::npos);
+    const auto invalidPlan = planUninstall(
+        uninstallRoot, UninstallEcosystem::Python, "bad;package");
+    assert(!invalidPlan.allowed);
+    assert(invalidPlan.reason.find("invalid") != std::string::npos);
+    std::filesystem::remove_all(uninstallRoot, ec);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
