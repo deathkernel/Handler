@@ -46,15 +46,18 @@ std::filesystem::path pythonExecutable(const std::filesystem::path& root) {
 #endif
 }
 
-std::string lower(std::string s) {
+std::string normalizePackage(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                   [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    for (char& c : s)
+        if (c == '_') c = '-';
     return s;
 }
 
 bool samePackage(const std::string& a, const std::string& b) {
-    return lower(a) == lower(b) ||
-           lower(a).replace(lower(a).find('_'), 1, "-") == lower(b);
+    return normalizePackage(a) == normalizePackage(b);
 }
 
 std::string pythonVersion(const std::filesystem::path& root,
@@ -64,11 +67,14 @@ std::string pythonVersion(const std::filesystem::path& root,
                     RiskLevel::Low, 30000, root};
     const auto result = executeCommand(cmd);
     if (!result.started || result.exitCode != 0) return {};
-    const std::regex versionLine(R"((?m)^Version:s*([^
-]+))");
-    std::smatch match;
-    return std::regex_search(result.output, match, versionLine)
-        ? match[1].str() : std::string{};
+    std::istringstream lines(result.output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (line.rfind("Version:", 0) == 0)
+            return line.substr(8).empty() ? std::string{} : line.substr(8).substr(
+                line.substr(8).find_first_not_of(" \t"));
+    }
+    return {};
 }
 
 std::string nodeVersion(const std::filesystem::path& root,
