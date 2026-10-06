@@ -84,6 +84,33 @@ int runSafeMode() {
     return c.enabled ? 0 : 1;
 }
 
+int runDoctor() {
+    std::cout << "Handler Doctor\n==============\n";
+    const auto health = handler::inspectSystem();
+    handler::printSystemHealth(health);
+
+    std::cout << "\nToolchain:\n";
+    for (const auto& tool : handler::inspectToolchain(
+             {"python", "node", "git", "cmake", "dotnet", "java", "go", "cargo"})) {
+        std::cout << "  [" << (tool.available ? "OK" : "MISSING") << "] "
+                  << tool.tool << ": " << tool.details << "\n";
+    }
+
+    std::cout << "\nPorts:\n";
+    for (const auto& port : handler::inspectPorts({3000, 5000, 8000, 8080})) {
+        std::cout << "  [" << (port.available ? "FREE" : "BUSY") << "] "
+                  << port.port << ": " << port.details << "\n";
+    }
+
+    const auto context = currentProject();
+    std::cout << "\nProject: "
+              << (context.root.empty() ? "not detected" : context.root.string())
+              << "\n";
+
+    makeHistory().record("DOCTOR", "environment/toolchain/resource/project checks completed");
+    return 0;
+}
+
 int runProtection() {
     handler::printEnvironmentHealth(handler::inspectEnvironmentHealth());
     for (const auto& f : handler::inspectPathEntries())
@@ -164,7 +191,7 @@ void printUsage() {
         << "  handler graph                  Show dependency edges\n"
         << "  handler decide <error text>    Generate repair decisions\n"
         << "  handler command <tool> [...]   Execute an allowlisted command\n"
-        << "  handler protect                Run protection diagnostics\n"
+        << "  handler protect                Run protection diagnostics\n        << "  handler doctor                 Run complete deterministic diagnostics\n";"
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler safe-mode              Prepare isolated sandbox context\n"
@@ -345,7 +372,7 @@ int main(int argc, char* argv[]) {
 
     const std::string command = argv[1];
 
-    if (command == "protect") return runProtection();
+    if (command == "protect") return runProtection();\n    if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
     if (command == "risk") {
         if (argc < 3) return 2;
