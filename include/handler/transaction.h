@@ -20,7 +20,7 @@ struct TransactionResult {
 class Transaction {
 public:
     using Action = std::function<bool()>;
-    using Rollback = std::function<void()>;
+    using Rollback = std::function<bool()>;
     using Verify = std::function<VerificationResult()>;
 
     explicit Transaction(SafetyMode mode);
