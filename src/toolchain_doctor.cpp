@@ -3,7 +3,6 @@
 #include "handler/component_discovery.h"
 #include "handler/transaction.h"
 #include "handler/verification.h"
-#include "handler/transaction.h"
 #include <unordered_map>
 #include <algorithm>
 #include <cctype>
@@ -60,7 +59,6 @@ std::vector<ToolchainRepair> proposeToolchainRepairs(
     }
     return out;
 }
-}
 
 bool repairToolchain(const std::string& tool, std::string& details) {
     // Only package-manager-owned, in-place upgrades with a deterministic
@@ -114,4 +112,5 @@ bool repairToolchain(const std::string& tool, std::string& details) {
     }
     details = "verified toolchain repair committed | snapshot=" + result.snapshotId;
     return true;
-}
+
+} // namespace handler
