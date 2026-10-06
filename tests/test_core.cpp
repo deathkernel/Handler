@@ -87,6 +87,9 @@ int main() {
     assert(doctor[1].status == "MISSING");
     const auto candidates = proposeToolchainRepairs(doctor);
     assert(candidates.size() == 2);
+    std::string repairDetails;
+    assert(!repairToolchain("node", repairDetails));
+    assert(repairDetails.find("explicit installer/source") != std::string::npos);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
