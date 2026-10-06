@@ -1,7 +1,8 @@
 #include "handler/dependency_graph.h"
 
 #include <iostream>
-#include <set>\n#include <algorithm>\n#include <utility>
+#include <set>
+#include <unordered_map>\n#include <algorithm>\n#include <utility>
 
 namespace handler {
 
@@ -23,12 +24,28 @@ std::vector<DependencyEdge> buildTransitiveDependencyGraph(
     const std::vector<DependencyEdge>& directEdges,
     const std::vector<DependencyEdge>& transitiveEdges) {
     std::vector<DependencyEdge> out = directEdges;
-    for (const auto& edge : transitiveEdges) {
-        auto it = std::find_if(out.begin(), out.end(), [&](const DependencyEdge& existing) {
-            return existing.source == edge.source && existing.target == edge.target &&
-                   existing.relation == edge.relation;
+    const auto addUnique = [&](const DependencyEdge& edge) {
+        const auto it=std::find_if(out.begin(),out.end(),[&](const DependencyEdge& e) {
+            return e.source==edge.source&&e.target==edge.target&&e.relation==edge.relation;
         });
-        if (it == out.end()) out.push_back(edge);
+        if(it==out.end()) out.push_back(edge);
+    };
+    for(const auto& edge:transitiveEdges) addUnique(edge);
+
+    std::unordered_map<std::string,std::vector<std::string>> adjacency;
+    for(const auto& edge:out) adjacency[edge.source].push_back(edge.target);
+
+    for(const auto& root:directEdges) {
+        std::vector<std::string> queue{root.target};
+        std::set<std::string> visited{root.source};
+        while(!queue.empty()) {
+            const auto node=queue.back(); queue.pop_back();
+            if(!visited.insert(node).second) continue;
+            if(node!=root.target) addUnique({root.source,node,"transitive"});
+            const auto it=adjacency.find(node);
+            if(it!=adjacency.end())
+                for(const auto& next:it->second) if(!visited.count(next)) queue.push_back(next);
+        }
     }
     return out;
 }
@@ -38,8 +55,19 @@ std::vector<DependencyImpact> analyzeDependencyImpact(
     const std::string& dependency) {
     std::vector<DependencyImpact> out;
     std::set<std::string> affected;
-    for (const auto& edge : edges) {
-        if (edge.target == dependency) affected.insert(edge.source);
+    std::unordered_map<std::string,std::vector<std::string>> reverse;
+    for(const auto& edge:edges) reverse[edge.target].push_back(edge.source);
+    std::vector<std::string> queue{dependency};
+    std::set<std::string> visited;
+    while(!queue.empty()) {
+        const auto node=queue.back(); queue.pop_back();
+        if(!visited.insert(node).second) continue;
+        const auto it=reverse.find(node);
+        if(it==reverse.end()) continue;
+        for(const auto& parent:it->second) {
+            if(parent!=dependency) affected.insert(parent);
+            if(!visited.count(parent)) queue.push_back(parent);
+        }
     }
     DependencyImpact impact;
     impact.dependency = dependency;
