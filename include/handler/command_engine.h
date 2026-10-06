@@ -3,6 +3,7 @@
 #include "handler/policy.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,8 @@ struct CommandSpec {
     std::vector<std::string> arguments;
     RiskLevel risk{RiskLevel::Medium};
     std::uint32_t timeoutMs{120000};
+    std::filesystem::path workingDirectory{};
+    std::filesystem::path executablePath{};
 };
 
 std::string quoteArgument(const std::string& value);
