@@ -27,6 +27,7 @@
 #include "handler/verification.h"
 #include "handler/router.h"
 #include "handler/state_store.h"
+#include "handler/state_paths.h"
 #include "handler/system_info.h"
 #include "handler/temp_cleaner.h"
 #include "handler/repair.h"
@@ -44,11 +45,7 @@ namespace {
 constexpr const char* kVersion = "0.8.0";
 
 std::filesystem::path stateRoot() {
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        return std::filesystem::path(p) / "Handler";
-    if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        return std::filesystem::path(p) / ".handler";
-    return std::filesystem::current_path() / ".handler";
+    return handler::handlerStateRoot();
 }
 
 handler::History makeHistory() {
