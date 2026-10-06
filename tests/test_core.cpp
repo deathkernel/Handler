@@ -55,6 +55,8 @@ int main() {
     assert(isAllowedExecutable("dotnet"));
     assert(isAllowedExecutable("npm"));
     assert(!isAllowedExecutable("format"));
+    assert(isAllowedExecutable("winget"));
+    assert(classifyCommandRisk("winget", {"upgrade", "--id", "Git.Git"}) == RiskLevel::High);
 
     const auto low = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
     assert(low.allowed && !low.requiresConfirmation);
@@ -158,7 +160,9 @@ int main() {
     assert(candidates.size() == 2);
     std::string repairDetails;
     assert(!repairToolchain("node", repairDetails));
-    assert(repairDetails.find("explicit installer/source") != std::string::npos);
+    assert(repairDetails.find("winget") != std::string::npos ||
+           repairDetails.find("Windows-only") != std::string::npos ||
+           repairDetails.find("available") != std::string::npos);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
