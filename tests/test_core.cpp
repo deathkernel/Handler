@@ -192,10 +192,10 @@ int main() {
     std::filesystem::create_directories(uninstallRoot);
     {
         std::ofstream manifest(uninstallRoot / "requirements.txt");
-        manifest << "requests>=2.0\n";
+        manifest << "handler-test-package-that-does-not-exist-987654>=1.0\n";
     }
     const auto blockedPlan = planUninstall(
-        uninstallRoot, UninstallEcosystem::Python, "requests");
+        uninstallRoot, UninstallEcosystem::Python, "handler-test-package-that-does-not-exist-987654");
     assert(blockedPlan.allowed == false);
     assert(blockedPlan.reason.find("not currently installed") != std::string::npos ||
            blockedPlan.reason.find("not a direct") != std::string::npos);
