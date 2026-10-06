@@ -171,6 +171,7 @@ bool repairToolchain(const std::string& tool, std::string& details) {
         },
         [&] {
             details += " | rollback: package downgrade is not attempted; recovery snapshot retained";
+            return true;
         });
     if (!result.committed) {
         details += " | transaction=" + result.details +
