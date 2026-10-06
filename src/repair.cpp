@@ -99,7 +99,7 @@ int repairPythonModule(const char* rawPackage) {
         std::getline(std::cin, answer);
         if (answer != "y" && answer != "Y") {
             std::cout << "Repair cancelled.\n";
-            return 0;
+            return kRepairCancelled;
         }
     }
 
@@ -126,9 +126,16 @@ int repairPythonModule(const char* rawPackage) {
             CommandSpec verify{"python-repair-verify", "python",
                 {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
             verify.executablePath = pythonPath;
-            const auto r = executeCommand(verify);
-            return VerificationResult{r.started && r.exitCode == 0,
-                                      "pip show", r.error};
+            const r = executeCommand(verify);
+            if (!r.started || r.exitCode != 0)
+                return VerificationResult{false, "pip show", r.error};
+            CommandSpec consistency{"python-repair-consistency", "python",
+                {"-m", "pip", "check"}, RiskLevel::Low, 30000};
+            consistency.executablePath = pythonPath;
+            const check = executeCommand(consistency);
+            return VerificationResult{check.started && check.exitCode == 0,
+                                      "pip show + pip check",
+                                      check.exitCode == 0 ? "" : check.error};
         },
         [&] {
             for (const auto& backup : backups) (void)restoreArtifact(backup);
@@ -184,7 +191,7 @@ int repairNodeModule(const char* rawPackage) {
         std::getline(std::cin, answer);
         if (answer != "y" && answer != "Y") {
             std::cout << "Repair cancelled.\n";
-            return 0;
+            return kRepairCancelled;
         }
     }
 
