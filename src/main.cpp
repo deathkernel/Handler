@@ -426,7 +426,7 @@ handler::ModuleRegistry buildModules() {
     registry.registerModule("modules", [] {
         std::cout << "Registered modules (activated on demand):\n"
                   << "  health\n  self-check\n  temp-cleanup\n"
-                  << "  maintenance\n  state\n  version\n  modules\n";
+                  << "  maintenance\n  state\n  status\n  history\n  version\n  modules\n";
         return 0;
     });
     return registry;
