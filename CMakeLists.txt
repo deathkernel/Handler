@@ -42,6 +42,7 @@ add_executable(handler
     src/uninstall.cpp
     src/repair.cpp
     src/auto_recovery.cpp
+    src/artifact_backup.cpp
 )
 
 target_include_directories(handler PRIVATE include)
