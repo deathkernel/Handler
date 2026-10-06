@@ -2,7 +2,7 @@
 
 > **A deterministic developer-environment protection, diagnosis, repair, maintenance, and recovery system.**
 
-Handler is a planned developer tool designed to protect a developer's coding environment from problems caused by dependency conflicts, missing tools, broken configurations, failed updates, incomplete installations, and other development-environment failures.
+Handler is an actively implemented C++17 developer tool designed to protect a developer's coding environment from problems caused by dependency conflicts, missing tools, broken configurations, failed updates, incomplete installations, and other development-environment failures.
 
 Handler is **not an AI assistant**. Its core intelligence is a deterministic decision-making system built from rules, diagnostics, environment state, known error patterns, recovery strategies, safety policies, command generation, and command execution.
 
@@ -49,7 +49,7 @@ THEN
 The decision engine should select an appropriate recovery strategy, verify the result, and move to the next strategy when a safe recovery path fails.
 
 ### 🔧 3. Automatic Error Recovery
-Handler can execute required commands to repair recognized problems.
+Handler can recognize supported Python/Node missing-module errors and route them through guarded, policy-confirmed repair. Package repair is transaction-backed with verification and a best-effort package-level rollback when the package was not previously installed.
 
 Example:
 
@@ -440,7 +440,7 @@ Planned behavior:
 - Run the cleanup on a **2-hour maintenance interval** when Handler maintenance mode is active
 - Keep cleanup focused on the TEMP directory rather than performing unrelated system cleanup
 
-The cleanup must remain conservative: Handler should not blindly delete files outside the intended TEMP scope.
+The cleanup is conservative: destructive runs require confirmation, entries modified within 24 hours are skipped, protected Handler directories are skipped, and failed/locked entries are reported. Maintenance mode uses dry-run cleanup because it is non-interactive.
 
 ## Dependency-First Implementation Order
 
