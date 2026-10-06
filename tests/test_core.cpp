@@ -220,7 +220,7 @@ int main() {
     assert(invalidPlan.reason.find("invalid") != std::string::npos);
     const auto missingManifestRoot = std::filesystem::temp_directory_path() / "handler_uninstall_missing_manifest";
     std::filesystem::remove_all(missingManifestRoot, ec);
-    std::filesystem::create_directories(missingManifestRoot);
+    std::filesystem::create_directories(missingManifestRoot / "node_modules");
     const auto missingManifestPlan = planUninstall(
         missingManifestRoot, UninstallEcosystem::NodeJs, "left-pad");
     assert(!missingManifestPlan.allowed);
