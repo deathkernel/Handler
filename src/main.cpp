@@ -687,6 +687,9 @@ int runGraph() {
         handler::buildDependencyGraph(context.root.filename().string(),
                                        info.declared);
     handler::printDependencyGraph(edges);
+    for (const auto& dep : info.declared)
+        handler::printDependencyImpact(
+            handler::analyzeDependencyImpact(edges, dep));
     makeHistory().record("DEPENDENCY_GRAPH",
         "edges=" + std::to_string(edges.size()));
     return 0;
