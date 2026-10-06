@@ -72,11 +72,11 @@ int main() {
     const std::vector<DependencyEdge> transitive = buildTransitiveDependencyGraph(
         graph, {{"flask", "werkzeug", "transitive"}, {"demo", "requests", "declares"}});
     assert(transitive.size() == 4);
-    const werkzeugImpact = analyzeDependencyImpact(transitive, "werkzeug");
+    const std::vector<DependencyImpact> werkzeugImpact = analyzeDependencyImpact(transitive, "werkzeug");
     assert(werkzeugImpact.size() == 1);
     assert(werkzeugImpact[0].affected.size() == 2);
     assert(werkzeugImpact[0].risk == "HIGH");
-    const impact = analyzeDependencyImpact(transitive, "requests");
+    const std::vector<DependencyImpact> impact = analyzeDependencyImpact(transitive, "requests");
     assert(impact.size() == 1);
     assert(impact[0].risk == "MEDIUM");
     assert(impact[0].affected.size() == 1);
