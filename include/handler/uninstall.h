@@ -24,6 +24,8 @@ struct UninstallResult {
     bool rolledBack{false};
     std::string details;
     std::string snapshotId;
+    bool rollbackVerified{false};
+    bool rollbackAttempted{false};
 };
 
 UninstallPlan planUninstall(const std::filesystem::path& projectRoot,
