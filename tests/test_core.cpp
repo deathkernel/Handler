@@ -91,7 +91,7 @@ int main() {
     DependencyInfo depInfo;
     depInfo.ecosystem = "Python";
     depInfo.manifest = "requirements.txt";
-    depInfo.declared = {"requests>=2.0", "flask==3.0", "requests<3.0"};
+    depInfo.declared = {"requests>=3.0", "flask==3.0", "requests<3.0"};
     const auto requirements = parseDependencyRequirements(depInfo);
     assert(requirements.size() == 3);
     const auto conflicts = findDependencyConflicts(requirements);
