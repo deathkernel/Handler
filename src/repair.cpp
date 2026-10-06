@@ -3,6 +3,7 @@
 #include "handler/action_engine.h"
 #include "handler/history.h"
 #include "handler/policy.h"
+#include "handler/project_context.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -33,6 +34,43 @@ std::filesystem::path repairStateRoot() {
     return std::filesystem::current_path() / ".handler";
 }
 
+std::filesystem::path pythonExecutableForCurrentContext() {
+    if (const char* v = std::getenv("VIRTUAL_ENV"); v && *v) {
+        const auto root = std::filesystem::path(v);
+#ifdef _WIN32
+        const auto candidate = root / "Scripts" / "python.exe";
+#else
+        const auto candidate = root / "bin" / "python";
+#endif
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(candidate, ec))
+            return candidate;
+    }
+
+    const auto project = detectProjectContext(std::filesystem::current_path());
+    if (!project.root.empty() && project.type == "Python") {
+        for (const auto& name : {".venv", "venv"}) {
+#ifdef _WIN32
+            const auto candidate = project.root / name / "Scripts" / "python.exe";
+#else
+            const auto candidate = project.root / name / "bin" / "python";
+#endif
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(candidate, ec))
+                return candidate;
+        }
+    }
+
+    return {};
+}
+
+std::filesystem::path nodeWorkingDirectory() {
+    const auto project = detectProjectContext(std::filesystem::current_path());
+    if (!project.root.empty() && project.type == "Node.js")
+        return project.root;
+    return {};
+}
+
 } // namespace
 
 int repairPythonModule(const char* rawPackage) {
@@ -42,7 +80,12 @@ int repairPythonModule(const char* rawPackage) {
         return 3;
     }
 
+    const auto pythonPath = pythonExecutableForCurrentContext();
+    const std::string target =
+        pythonPath.empty() ? "PATH Python" : pythonPath.string();
+
     std::cout << "Python repair requested for: " << package << "\n";
+    std::cout << "Target interpreter: " << target << "\n";
     std::cout << "Handler will run: python -m pip install " << package << "\n";
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
@@ -63,6 +106,7 @@ int repairPythonModule(const char* rawPackage) {
         RiskLevel::High,
         180000
     };
+    install.executablePath = pythonPath;
 
     const auto installResult = executeCommand(install);
     std::cout << installResult.output;
@@ -82,6 +126,7 @@ int repairPythonModule(const char* rawPackage) {
         RiskLevel::Low,
         30000
     };
+    verify.executablePath = pythonPath;
 
     const auto verifyResult = executeCommand(verify);
     if (!verifyResult.started || verifyResult.exitCode != 0) {
@@ -91,7 +136,7 @@ int repairPythonModule(const char* rawPackage) {
     }
 
     std::cout << "Repair verified: " << package << " is installed.\n";
-    history.record("PYTHON_REPAIR_SUCCESS", package);
+    history.record("PYTHON_REPAIR_SUCCESS", package + " | " + target);
     return 0;
 }
 
@@ -102,7 +147,14 @@ int repairNodeModule(const char* rawPackage) {
         return 3;
     }
 
+    const auto projectRoot = nodeWorkingDirectory();
+    if (projectRoot.empty()) {
+        std::cerr << "Node repair blocked: no package.json project detected.\n";
+        return 3;
+    }
+
     std::cout << "Node repair requested for: " << package << "\n";
+    std::cout << "Target project: " << projectRoot << "\n";
     std::cout << "Handler will run: npm install " << package << "\n";
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
@@ -123,13 +175,15 @@ int repairNodeModule(const char* rawPackage) {
         RiskLevel::High,
         180000
     };
+    install.workingDirectory = projectRoot;
 
     const auto installResult = executeCommand(install);
     std::cout << installResult.output;
 
     History history(repairStateRoot() / "history.log");
     if (!installResult.started || installResult.exitCode != 0) {
-        history.record("NODE_REPAIR_FAILED", package + " | " + installResult.error);
+        history.record("NODE_REPAIR_FAILED",
+                       package + " | " + installResult.error);
         std::cerr << "Repair failed. No further action taken.\n";
         return installResult.started ? installResult.exitCode : 1;
     }
@@ -141,6 +195,7 @@ int repairNodeModule(const char* rawPackage) {
         RiskLevel::Low,
         30000
     };
+    verify.workingDirectory = projectRoot;
 
     const auto verifyResult = executeCommand(verify);
     if (!verifyResult.started || verifyResult.exitCode != 0) {
@@ -150,7 +205,8 @@ int repairNodeModule(const char* rawPackage) {
     }
 
     std::cout << "Repair verified: " << package << " is installed.\n";
-    history.record("NODE_REPAIR_SUCCESS", package);
+    history.record("NODE_REPAIR_SUCCESS",
+                   package + " | " + projectRoot.string());
     return 0;
 }
 
