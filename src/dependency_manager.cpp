@@ -182,9 +182,23 @@ bool validDependencyPackage(const std::string& p) {
     return true;
 }
 std::filesystem::path dependencyStateRoot() { return handlerStateRoot(); }
+std::filesystem::path pythonProjectExecutable(const std::filesystem::path& root) {
+    for (const auto& name : {std::string(".venv"), std::string("venv")}) {
+#ifdef _WIN32
+        const auto candidate = root / name / "Scripts" / "python.exe";
+#else
+        const auto candidate = root / name / "bin" / "python";
+#endif
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(candidate, ec)) return candidate;
+    }
+    return {};
+}
+
 std::vector<std::string> registryVersions(const std::string& ecosystem,const std::string& package,
                                            const std::filesystem::path& root) {
     CommandSpec cmd{"dependency-registry-query",ecosystem=="Python"?"python":"npm",{},RiskLevel::Low,45000};
+    if (ecosystem == "Python") cmd.executablePath = pythonProjectExecutable(root);
     if(ecosystem=="Python") cmd.arguments={"-m","pip","index","versions",package,"--disable-pip-version-check"};
     else if(ecosystem=="Node.js") { cmd.arguments={"view",package,"versions","--json"}; cmd.workingDirectory=root; }
     else return {};
@@ -201,6 +215,7 @@ std::vector<std::string> registryVersions(const std::string& ecosystem,const std
 std::string installedDependencyVersion(const std::string& ecosystem,const std::string& package,
                                        const std::filesystem::path& root) {
     CommandSpec cmd{"dependency-current-query",ecosystem=="Python"?"python":"npm",{},RiskLevel::Low,30000};
+    if (ecosystem == "Python") cmd.executablePath = pythonProjectExecutable(root);
     if(ecosystem=="Python") cmd.arguments={"-m","pip","show",package,"--disable-pip-version-check"};
     else { cmd.arguments={"ls",package,"--depth=0","--json"}; cmd.workingDirectory=root; }
     const auto r=executeCommand(cmd);
@@ -263,6 +278,9 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
     if(!validDependencyPackage(package)||(ecosystem!="Python"&&ecosystem!="Node.js")) {
         std::cerr<<"Dependency upgrade blocked: unsupported package or ecosystem.\n"; return 3;
     }
+    if (ecosystem == "Python" && pythonProjectExecutable(projectRoot).empty()) {
+        std::cerr << "Dependency upgrade blocked: Python project-local .venv or venv is required.\\n"; return 3;
+    }
     const auto versions=registryVersions(ecosystem,package,projectRoot);
     const auto selected=selectCompatibleDependencyVersion({constraint},versions);
     if(!selected) { std::cerr<<"No registry version satisfies "<<package<<" "<<constraint<<".\n"; return 4; }
@@ -289,7 +307,7 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
     const auto result=tx.runApproved(RiskLevel::High,
         [&] {
             CommandSpec cmd{"dependency-upgrade",ecosystem=="Python"?"python":"npm",{},RiskLevel::High,180000};
-            if(ecosystem=="Python") cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check"};
+            if(ecosystem=="Python") { cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check"}; cmd.executablePath=pythonProjectExecutable(projectRoot); }
             else { cmd.arguments={"install",package+"@"+*selected,"--no-audit","--no-fund"}; cmd.workingDirectory=projectRoot; }
             const auto r=executeCommand(cmd); std::cout<<r.output; return r.started&&r.exitCode==0;
         },
