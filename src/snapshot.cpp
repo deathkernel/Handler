@@ -65,7 +65,6 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
 std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot) const {
     if (!validSnapshotId(snapshot.id)) return std::nullopt;
 
-    const auto expected = root_ / (snapshot.id + ".state");
     std::error_code ec;
     const auto canonicalRoot = std::filesystem::weakly_canonical(root_, ec);
     if (ec) return std::nullopt;
