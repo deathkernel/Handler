@@ -3,9 +3,11 @@
 #include "handler/error_detection.h"
 #include "handler/policy.h"
 #include "handler/risky_command.h"
+#include "handler/snapshot.h"
 
 #include <cassert>
 #include <iostream>
+#include <filesystem>
 
 int main() {
     using namespace handler;
@@ -37,6 +39,22 @@ int main() {
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
     assert(graph[0].source == "demo");
+
+    const auto tempRoot = std::filesystem::temp_directory_path() / "handler_snapshot_test";
+    std::error_code ec;
+    std::filesystem::remove_all(tempRoot, ec);
+    SnapshotStore snapshots(tempRoot);
+    EnvironmentState state;
+    state.timestampUtc = "test";
+    state.computerName = "machine";
+    state.userName = "user";
+    state.handlerVersion = "0.7.0";
+    const auto snapshot = snapshots.create(state);
+    assert(snapshot.has_value());
+    assert(snapshots.find(snapshot->id).has_value());
+    assert(snapshots.load(*snapshot).has_value());
+    assert(snapshots.list().size() == 1);
+    std::filesystem::remove_all(tempRoot, ec);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
