@@ -175,6 +175,11 @@ int main() {
     assert(repairDetails.find("winget") != std::string::npos ||
            repairDetails.find("Windows-only") != std::string::npos ||
            repairDetails.find("available") != std::string::npos);
+#ifndef _WIN32
+    repairDetails.clear();
+    assert(!repairToolchain("python", repairDetails));
+    assert(repairDetails.find("not enabled") != std::string::npos);
+#endif
 
     std::cout << "Handler core tests passed.\n";
     return 0;
