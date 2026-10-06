@@ -113,4 +113,6 @@ bool repairToolchain(const std::string& tool, std::string& details) {
     details = "verified toolchain repair committed | snapshot=" + result.snapshotId;
     return true;
 
+}
+
 } // namespace handler
