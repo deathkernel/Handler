@@ -219,7 +219,9 @@ int runDoctor() {
 
     std::cout << "\nPorts:\n";
     for (const auto& port : handler::inspectPorts({3000, 5000, 8000, 8080})) {
-        std::cout << "  [" << (port.available ? "FREE" : "BUSY") << "] "
+        const bool probeUnavailable = port.details.find("probe unavailable") != std::string::npos;
+        const char* status = probeUnavailable ? "UNKNOWN" : (port.available ? "FREE" : "BUSY");
+        std::cout << "  [" << status << "] "
                   << port.port << ": " << port.details << "\n";
     }
 
