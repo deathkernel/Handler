@@ -132,7 +132,7 @@ int repairPythonModule(const char* rawPackage) {
             CommandSpec consistency{"python-repair-consistency", "python",
                 {"-m", "pip", "check"}, RiskLevel::Low, 30000};
             consistency.executablePath = pythonPath;
-            const check = executeCommand(consistency);
+            const auto check = executeCommand(consistency);
             return VerificationResult{check.started && check.exitCode == 0,
                                       "pip show + pip check",
                                       check.exitCode == 0 ? "" : check.error};
