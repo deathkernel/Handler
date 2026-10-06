@@ -4,6 +4,8 @@
 #include <iostream>
 #include <regex>
 #include <string>
+#include <unordered_map>
+#include <set>
 
 namespace handler {
 
@@ -68,3 +70,53 @@ void printDependencies(const DependencyInfo& info) {
 }
 
 } // namespace handler
+
+std::vector<DependencyRequirement> parseDependencyRequirements(const DependencyInfo& info) {
+    std::vector<DependencyRequirement> out;
+    for (const auto& raw : info.declared) {
+        std::string line = raw;
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) line.erase(line.begin());
+        if (line.empty() || line[0] == '#' || line[0] == '[') continue;
+        const auto pos = line.find_first_of("=<>!~ ");
+        const std::string name = pos == std::string::npos ? line : line.substr(0, pos);
+        std::string constraint = pos == std::string::npos ? "*" : line.substr(pos);
+        if (!name.empty()) out.push_back({name, constraint, true});
+    }
+    return out;
+}
+
+std::vector<DependencyConflict> findDependencyConflicts(
+    const std::vector<DependencyRequirement>& requirements) {
+    std::unordered_map<std::string, std::string> seen;
+    std::vector<DependencyConflict> out;
+    for (const auto& r : requirements) {
+        const auto it = seen.find(r.name);
+        if (it == seen.end()) { seen[r.name] = r.constraint; continue; }
+        if (it->second != r.constraint)
+            out.push_back({r.name, it->second, r.constraint,
+                           "multiple direct requirements impose different constraints"});
+    }
+    return out;
+}
+
+std::vector<DependencyCandidate> proposeDependencyUpgrades(
+    const std::vector<DependencyRequirement>& requirements) {
+    std::vector<DependencyCandidate> out;
+    for (const auto& r : requirements)
+        out.push_back({r.name, "unknown", r.constraint, "REVIEW",
+                       "registry/current-version lookup required before changing the manifest"});
+    return out;
+}
+
+void printDependencyAnalysis(const std::vector<DependencyConflict>& conflicts,
+                             const std::vector<DependencyCandidate>& candidates) {
+    std::cout << "Dependency analysis:\n";
+    std::cout << "  Conflicts: " << conflicts.size() << "\n";
+    for (const auto& c : conflicts)
+        std::cout << "    [CONFLICT] " << c.name << ": " << c.left
+                  << " vs " << c.right << " | " << c.reason << "\n";
+    std::cout << "  Upgrade candidates: " << candidates.size() << "\n";
+    for (const auto& c : candidates)
+        std::cout << "    [" << c.action << "] " << c.name
+                  << " " << c.constraint << " | " << c.reason << "\n";
+}
