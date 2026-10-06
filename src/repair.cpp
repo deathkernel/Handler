@@ -82,7 +82,11 @@ int repairPythonModule(const char* rawPackage) {
     }
 
     const auto pythonPath = pythonExecutableForCurrentContext();
-    const std::string target = pythonPath.empty() ? "PATH Python" : pythonPath.string();
+    if (pythonPath.empty()) {
+        std::cerr << "Python repair blocked: project-local .venv/venv is required; global Python modification is blocked.\n";
+        return 3;
+    }
+    const std::string target = pythonPath.string();
     std::cout << "Python repair requested for: " << package << "\n"
               << "Target interpreter: " << target << "\n";
 
