@@ -159,7 +159,7 @@ int main() {
     const auto candidates = proposeToolchainRepairs(doctor);
     assert(candidates.size() == 2);
     std::string repairDetails;
-    assert(!repairToolchain("node", repairDetails));
+    assert(!repairToolchain("java", repairDetails));
     assert(repairDetails.find("winget") != std::string::npos ||
            repairDetails.find("Windows-only") != std::string::npos ||
            repairDetails.find("available") != std::string::npos);
