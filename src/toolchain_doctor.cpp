@@ -146,7 +146,7 @@ bool repairToolchain(const std::string& tool, std::string& details) {
 
     const std::string packageId = target->packageId;
     Transaction tx(SafetyMode::Confirm);
-    const auto result = tx.run(
+    const auto result = tx.runApproved(
         RiskLevel::High,
         [&] {
             CommandSpec action{
