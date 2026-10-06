@@ -98,6 +98,27 @@ int runSafeMode() {
 
 handler::ProjectContext currentProject();
 
+int runDoctorRepair() {
+    const auto findings = handler::inspectToolchain(
+        {"python", "node", "git", "cmake", "dotnet", "java", "go", "cargo"});
+    std::cout << "Toolchain Doctor\n================\n";
+    for (const auto& f : findings)
+        std::cout << "[" << f.status << "] " << f.tool
+                  << " | " << (f.path.empty() ? "missing" : f.path)
+                  << " | " << (f.version.empty() ? "no version" : f.version)
+                  << " | " << f.details << "\n";
+    const auto repairs = handler::proposeToolchainRepairs(findings);
+    std::cout << "\nRepair candidates\n------------------\n";
+    for (const auto& r : repairs)
+        std::cout << "[" << (r.supported ? "SUPPORTED" : "REVIEW") << "] "
+                  << r.tool << ": " << r.reason
+                  << (r.command.empty() ? "" : " | " + r.command) << "\n";
+    makeHistory().record("TOOLCHAIN_DOCTOR",
+        "tools=" + std::to_string(findings.size()) +
+        ", repair_candidates=" + std::to_string(repairs.size()));
+    return 0;
+}
+
 int runDoctor() {
     std::cout << "Handler Doctor\n==============\n";
     const auto health = handler::inspectSystem();
@@ -381,6 +402,7 @@ void printUsage() {
         << "  handler env-repair <file> [--user] Restore environment safely\n"
         << "  handler protect                Run protection diagnostics\n"
         << "  handler doctor                 Run complete deterministic diagnostics\n"
+        << "  handler doctor-repair          Diagnose toolchains and show guarded repair candidates\n"
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler repair python-module <package> Repair a Python module safely\n"
@@ -695,6 +717,7 @@ int main(int argc, char* argv[]) {
         return runPathRepair(argv[2]);
     }
     if (command == "protect") return runProtection();
+    if (command == "doctor-repair") return runDoctorRepair();
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
     if (command == "risk") {
