@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdio>
 #include <string>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -30,38 +31,40 @@ std::wstring toWide(const std::string& value) {
 }
 
 std::wstring quoteWideArgument(const std::wstring& value) {
-    if (value.empty()) return L"""";
+    if (value.empty()) return L"\"\"";
 
     bool needsQuotes = false;
     for (wchar_t ch : value) {
         if (ch == L' ' || ch == L'\t' || ch == L'\n' ||
-            ch == L'\v' || ch == L'"')
+            ch == L'\v' || ch == L'\"' || ch == L'\\') {
             needsQuotes = true;
+            break;
+        }
     }
     if (!needsQuotes) return value;
 
     std::wstring out;
-    out.push_back(L'"');
+    out.push_back(L'\"');
     std::size_t backslashes = 0;
 
-    for (const wchar_t ch : value) {
-        if (ch == L'\') {
+    for (wchar_t ch : value) {
+        if (ch == L'\\') {
             ++backslashes;
             continue;
         }
-        if (ch == L'"') {
-            out.append(backslashes * 2 + 1, L'\');
-            out.push_back(L'"');
+        if (ch == L'\"') {
+            out.append(backslashes * 2 + 1, L'\\');
+            out.push_back(L'\"');
             backslashes = 0;
             continue;
         }
-        out.append(backslashes, L'\');
+        out.append(backslashes, L'\\');
         backslashes = 0;
         out.push_back(ch);
     }
 
-    out.append(backslashes * 2, L'\');
-    out.push_back(L'"');
+    out.append(backslashes * 2, L'\\');
+    out.push_back(L'\"');
     return out;
 }
 
@@ -135,6 +138,16 @@ ActionResult executeCommand(const CommandSpec& command) {
         AssignProcessToJobObject(job, process.hProcess);
     }
 
+    std::string output;
+    std::thread reader([&] {
+        std::array<char, 4096> buffer{};
+        DWORD bytesRead = 0;
+        while (ReadFile(readPipe, buffer.data(),
+                        static_cast<DWORD>(buffer.size()),
+                        &bytesRead, nullptr) && bytesRead > 0)
+            output.append(buffer.data(), bytesRead);
+    });
+
     const DWORD timeout = command.timeoutMs == 0 ? 120000 : command.timeoutMs;
     const DWORD wait = WaitForSingleObject(process.hProcess, timeout);
 
@@ -146,33 +159,25 @@ ActionResult executeCommand(const CommandSpec& command) {
             TerminateProcess(process.hProcess, 124);
             WaitForSingleObject(process.hProcess, 5000);
         }
-        CloseHandle(readPipe);
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
-        return {true, 124, {}, "command timed out and was terminated"};
+        if (reader.joinable()) reader.join();
+        CloseHandle(readPipe);
+        return {true, 124, output, "command timed out and was terminated"};
     }
-
-    std::string output;
-    std::array<char, 4096> buffer{};
-    DWORD bytesRead = 0;
-    while (ReadFile(readPipe, buffer.data(),
-                    static_cast<DWORD>(buffer.size()),
-                    &bytesRead, nullptr) && bytesRead > 0)
-        output.append(buffer.data(), bytesRead);
-
-    CloseHandle(readPipe);
 
     DWORD exitCode = 1;
-    if (!GetExitCodeProcess(process.hProcess, &exitCode)) {
-        if (job) CloseHandle(job);
-        CloseHandle(process.hThread);
-        CloseHandle(process.hProcess);
-        return {true, -1, output, "failed to read process exit code"};
-    }
+    const BOOL exitRead = GetExitCodeProcess(process.hProcess, &exitCode);
 
     if (job) CloseHandle(job);
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);
+
+    if (reader.joinable()) reader.join();
+    CloseHandle(readPipe);
+
+    if (!exitRead)
+        return {true, -1, output, "failed to read process exit code"};
 
     const int code = static_cast<int>(exitCode);
     return {true, code, output, code == 0 ? std::string{} : output};
