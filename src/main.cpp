@@ -30,6 +30,7 @@
 #include "handler/system_info.h"
 #include "handler/temp_cleaner.h"
 #include "handler/repair.h"
+#include "handler/auto_recovery.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -208,7 +209,7 @@ void printUsage() {
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler repair python-module <package> Repair a Python module safely\n"
-        << "  handler repair node-module <package>   Repair a Node module in the detected project\n"
+        << "  handler repair node-module <package>   Repair a Node module in the detected project\n        << "  handler recover <error text>       Detect and propose a guarded repair\n"
         << "  handler safe-mode              Prepare isolated sandbox context\n"
         << "  handler modules                Show registered modules\n"
         << "  handler version                Show Handler version\n"
@@ -395,6 +396,14 @@ int main(int argc, char* argv[]) {
         return runRisk(joinArguments(argc, argv, 2));
     }
     if (command == "safe-mode") return runSafeMode();
+
+    if (command == "recover") {
+        if (argc < 3) {
+            std::cerr << "Usage: handler recover <error text>\n";
+            return 2;
+        }
+        return handler::autoRecover(joinArguments(argc, argv, 2));
+    }
 
     if (command == "repair") {
         if (argc < 4) {
