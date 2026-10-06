@@ -8,7 +8,8 @@
 namespace handler {
 
 namespace {
-void collectSimpleLines(const std::filesystem::path& file, std::vector<std::string>& out) {
+void collectSimpleLines(const std::filesystem::path& file,
+                        std::vector<std::string>& out) {
     std::ifstream input(file);
     if (!input) return;
     std::string line;
@@ -19,30 +20,35 @@ void collectSimpleLines(const std::filesystem::path& file, std::vector<std::stri
 }
 }
 
-DependencyInfo inspectDependencies(const std::filesystem::path& root, const std::string& type) {
+DependencyInfo inspectDependencies(const std::filesystem::path& root,
+                                   const std::string& type) {
     DependencyInfo info;
     info.ecosystem = type;
 
     if (type == "Python" && std::filesystem::exists(root / "requirements.txt")) {
         info.manifest = "requirements.txt";
         collectSimpleLines(root / "requirements.txt", info.declared);
-    } else if (type == "Node.js" && std::filesystem::exists(root / "package.json")) {
+    } else if (type == "Node.js" &&
+               std::filesystem::exists(root / "package.json")) {
         info.manifest = "package.json";
         std::ifstream input(root / "package.json");
         std::string line;
-        std::regex dependencyLine(R"(^\s*"([^"]+)"\s*:\s*"([^"]+)")");
+        const std::regex dependencyLine(
+            R"(^\s*"([^"]+)"\s*:\s*"([^"]+)")");
         while (std::getline(input, line)) {
             std::smatch match;
             if (std::regex_search(line, match, dependencyLine))
                 info.declared.push_back(match[1].str() + " " + match[2].str());
         }
-    } else if (type == "Rust" && std::filesystem::exists(root / "Cargo.toml")) {
+    } else if (type == "Rust" &&
+               std::filesystem::exists(root / "Cargo.toml")) {
         info.manifest = "Cargo.toml";
         collectSimpleLines(root / "Cargo.toml", info.declared);
     } else if (type == "Go" && std::filesystem::exists(root / "go.mod")) {
         info.manifest = "go.mod";
         collectSimpleLines(root / "go.mod", info.declared);
-    } else if (type == "C/C++" && std::filesystem::exists(root / "CMakeLists.txt")) {
+    } else if (type == "C/C++" &&
+               std::filesystem::exists(root / "CMakeLists.txt")) {
         info.manifest = "CMakeLists.txt";
     }
     return info;
@@ -53,9 +59,10 @@ void printDependencies(const DependencyInfo& info) {
         std::cout << "Dependency inspection: no supported manifest found.\n";
         return;
     }
-    std::cout << "Dependency inspection [" << info.ecosystem << "] via "
-              << info.manifest << ":\n";
-    for (const auto& dep : info.declared) std::cout << "  " << dep << '\n';
+    std::cout << "Dependency inspection [" << info.ecosystem
+              << "] via " << info.manifest << ":\n";
+    for (const auto& dep : info.declared)
+        std::cout << "  " << dep << '\n';
     if (info.declared.empty())
         std::cout << "  No dependency entries parsed by the current lightweight scanner.\n";
 }
