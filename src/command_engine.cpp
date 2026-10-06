@@ -55,7 +55,7 @@ bool isAllowedExecutable(const std::string& executable) {
         || executable == "git" || executable == "python"
         || executable == "python.exe" || executable == "node"
         || executable == "node.exe" || executable == "dotnet"
-        || executable == "dotnet.exe";
+        || executable == "dotnet.exe" || executable == "npm" || executable == "npm.cmd";
 }
 
 } // namespace handler
