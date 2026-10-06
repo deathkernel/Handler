@@ -210,8 +210,12 @@ std::string installedDependencyVersion(const std::string& ecosystem,const std::s
     if(!r.started||r.exitCode!=0) return {};
     std::smatch m;
     if(ecosystem=="Python") {
-        const std::regex re(R"((?:^|\n)Version:\s*([^\r\n]+))");
-        if(std::regex_search(r.output,m,re)) return depTrim(m[1].str());
+        const auto pos=r.output.find("Version:");
+        if(pos!=std::string::npos) {
+            const auto begin=pos+8;
+            const auto end=r.output.find_first_of("\r\n",begin);
+            return depTrim(r.output.substr(begin,end==std::string::npos?r.output.size()-begin:end-begin));
+        }
     } else {
         const std::regex re(R"("version"\s*:\s*"([^"]+)")");
         if(std::regex_search(r.output,m,re)) return m[1].str();
