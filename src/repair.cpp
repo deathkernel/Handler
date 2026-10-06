@@ -7,6 +7,7 @@
 #include "handler/transaction.h"
 #include "handler/artifact_backup.h"
 #include "handler/verification.h"
+#include "handler/state_paths.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -31,11 +32,7 @@ bool validPackageName(const std::string& package) {
 }
 
 std::filesystem::path repairStateRoot() {
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        return std::filesystem::path(p) / "Handler";
-    if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        return std::filesystem::path(p) / ".handler";
-    return std::filesystem::current_path() / ".handler";
+    return handlerStateRoot();
 }
 
 std::filesystem::path pythonExecutableForCurrentContext() {
