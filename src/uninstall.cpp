@@ -165,6 +165,14 @@ std::vector<ArtifactBackup> backupManifests(const UninstallPlan& plan,
     return backups;
 }
 
+bool installedAtVersion(const UninstallPlan& plan) {
+    if (plan.ecosystem == UninstallEcosystem::Python)
+        return pythonVersion(plan.projectRoot, plan.packageName) == plan.installedVersion;
+
+    const auto version = nodeVersion(plan.projectRoot, plan.packageName);
+    return version == plan.installedVersion;
+}
+
 bool reinstall(const UninstallPlan& plan) {
     if (plan.installedVersion.empty()) return false;
     if (plan.ecosystem == UninstallEcosystem::Python) {
@@ -303,11 +311,11 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
         });
 
     if (!result.committed) {
-        const bool rollbackVerified = result.rolledBack;
-        return {false, result.rolledBack,
-                result.rolledBack ? "uninstall failed; rollback completed and was recorded"
-                                  : "uninstall failed; rollback could not be verified",
-                result.snapshotId, rollbackVerified, true};
+        const bool rollbackVerified = result.rolledBack && installedAtVersion(plan);
+        return {false, rollbackVerified,
+                rollbackVerified ? "uninstall failed; exact package version was restored and verified"
+                                 : "uninstall failed; rollback was attempted but could not be verified",
+                result.snapshotId, rollbackVerified, result.rolledBack};
     }
     return {true, false, "package uninstalled and verified; recovery artifacts retained",
             result.snapshotId, false, false};

@@ -218,6 +218,27 @@ int main() {
         uninstallRoot, UninstallEcosystem::Python, "bad;package");
     assert(!invalidPlan.allowed);
     assert(invalidPlan.reason.find("invalid") != std::string::npos);
+    const auto missingManifestRoot = std::filesystem::temp_directory_path() / "handler_uninstall_missing_manifest";
+    std::filesystem::remove_all(missingManifestRoot, ec);
+    std::filesystem::create_directories(missingManifestRoot / "node_modules");
+    const auto missingManifestPlan = planUninstall(
+        missingManifestRoot, UninstallEcosystem::NodeJs, "left-pad");
+    assert(!missingManifestPlan.allowed);
+    assert(missingManifestPlan.reason.find("manifest") != std::string::npos);
+    std::filesystem::remove_all(missingManifestRoot, ec);
+
+    const auto malformedRoot = std::filesystem::temp_directory_path() / "handler_uninstall_malformed";
+    std::filesystem::remove_all(malformedRoot, ec);
+    std::filesystem::create_directories(malformedRoot);
+    std::ofstream malformed(malformedRoot / "package.json");
+    malformed << "{not-json";
+    malformed.close();
+    std::filesystem::create_directories(malformedRoot / "node_modules");
+    const auto malformedPlan = planUninstall(
+        malformedRoot, UninstallEcosystem::NodeJs, "left-pad");
+    assert(!malformedPlan.allowed);
+    std::filesystem::remove_all(malformedRoot, ec);
+
     std::filesystem::remove_all(uninstallRoot, ec);
 
     std::cout << "Handler core tests passed.\n";

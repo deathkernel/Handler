@@ -822,6 +822,20 @@ Batch 2 strengthens the guarded uninstall boundary:
 
 The uninstall engine still does **not** remove global packages, runtimes, or operating-system applications.
 
+## Phase 4 — Batch 3: Final Uninstall Hardening
+
+The final Phase 4 batch closes the guarded project-uninstall implementation:
+
+- Rollback is no longer reported as verified merely because a rollback callback ran; Handler re-checks the exact captured package version after recovery.
+- CLI output explicitly reports whether a rollback was attempted and whether it was verified.
+- Additional regression tests cover missing manifests and malformed Node project manifests.
+- Project-local scope remains mandatory: Python uses `.venv`/`venv`, and Node.js requires `node_modules`.
+- Global packages, runtimes, operating-system applications, and transitive-only removal remain blocked.
+
+### Phase 4 completion boundary
+
+Phase 4 is complete for its defined scope: safe removal of direct Python/Node.js project dependencies with confirmation, preflight checks, backups, transaction protection, verification, and truthful rollback reporting. It does not claim universal package-manager rollback or operating-system application removal.
+
 ## Roadmap
 
 ### Phase 0 — Specification
