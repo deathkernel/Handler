@@ -125,6 +125,8 @@ int main() {
     assert(!satisfiesDependencyConstraint(*v350, ">=2.0,<3.0"));
     assert(dependencyConstraintsCompatible({">=2.0", "<3.0"}));
     assert(!dependencyConstraintsCompatible({">=3.0", "<3.0"}));
+    assert(dependencyConstraintsCompatible({">=21.0,<22.0"}));
+    assert(!dependencyConstraintsCompatible({">=21.0,<21.0"}));
     const auto selected = selectCompatibleDependencyVersion(
         {">=2.0,<4.0"}, {"1.9.0", "2.4.0", "3.1.0", "4.0.0"});
     assert(selected.has_value() && *selected == "3.1.0");
