@@ -4,6 +4,7 @@
 #include "handler/policy.h"
 #include "handler/risky_command.h"
 #include "handler/snapshot.h"
+#include "handler/path_guardian.h"
 
 #include <cassert>
 #include <iostream>
@@ -55,6 +56,15 @@ int main() {
     assert(snapshots.load(*snapshot).has_value());
     assert(snapshots.list().size() == 1);
     std::filesystem::remove_all(tempRoot, ec);
+
+    const auto pathRoot = std::filesystem::temp_directory_path() / "handler_path_test";
+    std::filesystem::remove_all(pathRoot, ec);
+    const auto baseline = pathRoot / "path.baseline";
+    assert(savePathBaseline(baseline));
+    std::vector<std::string> loaded;
+    assert(loadPathBaseline(baseline, loaded));
+    assert(!loaded.empty());
+    std::filesystem::remove_all(pathRoot, ec);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
