@@ -69,6 +69,7 @@ add_executable(handler_tests
     src/risky_command.cpp
     src/snapshot.cpp
     src/environment_state.cpp
+    src/path_guardian.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
