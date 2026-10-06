@@ -26,6 +26,8 @@ public:
     explicit Transaction(SafetyMode mode);
     TransactionResult run(RiskLevel risk, const Action& action,
                           const Verify& verify, const Rollback& rollback);
+    TransactionResult runApproved(RiskLevel risk, const Action& action,
+                                  const Verify& verify, const Rollback& rollback);
 
 private:
     SafetyMode mode_;
