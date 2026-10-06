@@ -24,8 +24,8 @@ int main() {
     using namespace handler;
 
     assert(quoteArgument("plain") == "plain");
-    assert(quoteArgument("hello world") == ""hello world"");
-    assert(quoteArgument("a\\b c") == ""a\\\\b c"");
+    assert(quoteArgument("hello world") == "\"hello world\"");
+    assert(quoteArgument("a\\b c") == "\"a\\\\b c\"");
 
     const auto stateRoot = handlerStateRoot();
     const auto transactionRoot = handlerTransactionRoot();
