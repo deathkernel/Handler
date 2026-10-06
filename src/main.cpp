@@ -125,6 +125,95 @@ int runDoctor() {
     return 0;
 }
 
+int runEnvironmentBaseline(const std::string& file, const std::vector<std::string>& names) {
+    if (names.empty()) return 2;
+    if (!handler::saveEnvironmentBaseline(file, names)) {
+        std::cerr << "Environment baseline could not be saved.\n";
+        return 1;
+    }
+    std::cout << "Environment baseline saved: " << file << "\n";
+    return 0;
+}
+
+int runEnvironmentAudit(const std::string& file) {
+    std::vector<handler::EnvironmentEntry> entries;
+    if (!handler::loadEnvironmentBaseline(file, entries)) {
+        std::cerr << "Environment baseline could not be loaded.\n";
+        return 2;
+    }
+    const auto diff = handler::compareEnvironmentBaseline(entries);
+    std::cout << "Environment audit\n------------------\n"
+              << "Missing : " << diff.missing.size() << "\n"
+              << "Changed : " << diff.changed.size() << "\n";
+    for (const auto& n : diff.missing) std::cout << "  [MISSING] " << n << "\n";
+    for (const auto& n : diff.changed) std::cout << "  [CHANGED] " << n << "\n";
+    makeHistory().record("ENVIRONMENT_AUDIT",
+        "missing=" + std::to_string(diff.missing.size()) +
+        ", changed=" + std::to_string(diff.changed.size()));
+    return 0;
+}
+
+int runEnvironmentRepair(const std::string& file, bool userScope) {
+    std::vector<handler::EnvironmentEntry> target;
+    if (!handler::loadEnvironmentBaseline(file, target)) {
+        std::cerr << "Environment repair blocked: invalid baseline.\n";
+        return 2;
+    }
+    const auto rollbackFile = stateRoot() / "transactions" / "environment-rollback.baseline";
+    std::vector<std::string> names;
+    for (const auto& e : target) names.push_back(e.name);
+    if (!handler::saveEnvironmentBaseline(rollbackFile, names)) {
+        std::cerr << "Environment repair blocked: current baseline backup failed.\n";
+        return 1;
+    }
+    std::cout << "Environment repair will restore " << target.size()
+              << (userScope ? " variables in User scope" : " variables in Process scope")
+              << ". [y/N]: ";
+    std::string answer;
+    std::getline(std::cin, answer);
+    if (answer != "y" && answer != "Y") {
+        makeHistory().record("ENVIRONMENT_REPAIR_CANCELLED");
+        std::cout << "Environment repair cancelled.\n";
+        return 0;
+    }
+    const auto scope = userScope ? handler::EnvironmentScope::User
+                                 : handler::EnvironmentScope::Process;
+    handler::Transaction tx(handler::SafetyMode::Confirm);
+    const auto result = tx.runApproved(
+        handler::RiskLevel::High,
+        [&] {
+            std::string details;
+            const bool ok = handler::restoreEnvironmentEntries(target, scope, details);
+            std::cout << details << "\n";
+            return ok;
+        },
+        [&] {
+            const auto diff = handler::compareEnvironmentBaseline(target);
+            return handler::VerificationResult{
+                diff.missing.empty() && diff.changed.empty(),
+                "environment baseline comparison",
+                (diff.missing.empty() && diff.changed.empty())
+                    ? "baseline matches" : "baseline differs"};
+        },
+        [&] {
+            std::vector<handler::EnvironmentEntry> rollback;
+            if (handler::loadEnvironmentBaseline(rollbackFile, rollback)) {
+                std::string details;
+                (void)handler::restoreEnvironmentEntries(rollback, scope, details);
+            }
+        });
+    if (!result.committed) {
+        makeHistory().record("ENVIRONMENT_REPAIR_FAILED",
+            result.details + " | snapshot=" + result.snapshotId);
+        std::cerr << "Environment repair did not commit: " << result.details << "\n";
+        return 1;
+    }
+    makeHistory().record("ENVIRONMENT_REPAIR_SUCCESS",
+        file + " | snapshot=" + result.snapshotId);
+    std::cout << "Environment repair verified and committed.\n";
+    return 0;
+}
+
 int runPathRepair(const std::string& baselineFile) {
     std::filesystem::path baseline = baselineFile;
     if (!std::filesystem::exists(baseline)) {
@@ -287,6 +376,9 @@ void printUsage() {
         << "  handler command <tool> [...]   Execute an allowlisted command\n"
         << "  handler path-audit             Audit PATH without modifying the OS\n"
         << "  handler path-repair <baseline> Restore PATH from a trusted baseline\n"
+        << "  handler env-baseline <file> <names...> Save safe environment baseline\n"
+        << "  handler env-audit <file>      Compare environment with baseline\n"
+        << "  handler env-repair <file> [--user] Restore environment safely\n"
         << "  handler protect                Run protection diagnostics\n"
         << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler updates                Inspect tool updates\n"
@@ -584,6 +676,20 @@ int main(int argc, char* argv[]) {
     const std::string command = argv[1];
 
     if (command == "path-audit") return runPathAudit();
+    if (command == "env-baseline") {
+        if (argc < 4) { std::cerr << "Usage: handler env-baseline <file> <name...>\\n"; return 2; }
+        std::vector<std::string> names;
+        for (int i = 3; i < argc; ++i) names.emplace_back(argv[i]);
+        return runEnvironmentBaseline(argv[2], names);
+    }
+    if (command == "env-audit") {
+        if (argc < 3) { std::cerr << "Usage: handler env-audit <file>\\n"; return 2; }
+        return runEnvironmentAudit(argv[2]);
+    }
+    if (command == "env-repair") {
+        if (argc < 3) { std::cerr << "Usage: handler env-repair <file> [--user]\\n"; return 2; }
+        return runEnvironmentRepair(argv[2], argc >= 4 && std::string(argv[3]) == "--user");
+    }
     if (command == "path-repair") {
         if (argc < 3) { std::cerr << "Usage: handler path-repair <baseline-file>\\n"; return 2; }
         return runPathRepair(argv[2]);
