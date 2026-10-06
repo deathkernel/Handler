@@ -35,6 +35,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -213,6 +214,8 @@ void printUsage() {
         << "  handler recover <error text>       Detect and propose a guarded repair\n"
         << "  handler safe-mode              Prepare isolated sandbox context\n"
         << "  handler modules                Show registered modules\n"
+        << "  handler status                 Show saved environment status\n"
+        << "  handler history                Show recent Handler events\n"
         << "  handler version                Show Handler version\n"
         << "  handler help                   Show this help\n";
 }
@@ -293,6 +296,40 @@ int runTempCleanup(bool dryRun = false) {
         "files=" + std::to_string(result.filesRemoved) +
         ", skipped=" + std::to_string(result.skipped) +
         ", dry_run=" + std::string(dryRun ? "true" : "false"));
+    return 0;
+}
+
+int runStatus() {
+    const auto state = makeStateStore().loadCurrent();
+    if (!state) {
+        std::cout << "Handler status: no saved environment state. Run 'handler state'.\n";
+        return 1;
+    }
+    std::cout << "Handler status\n---------------\n"
+              << "Last capture : " << state->timestampUtc << "\n"
+              << "Computer     : " << state->computerName << "\n"
+              << "User         : " << state->userName << "\n"
+              << "TEMP         : " << state->tempPath << "\n"
+              << "Directory    : " << state->currentDirectory.string() << "\n"
+              << "Version      : " << state->handlerVersion << "\n";
+    return 0;
+}
+
+int runHistory() {
+    const auto file = stateRoot() / "history.log";
+    std::ifstream in(file);
+    if (!in) {
+        std::cout << "No Handler history found.\n";
+        return 0;
+    }
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(in, line)) lines.push_back(line);
+    const std::size_t start = lines.size() > 20 ? lines.size() - 20 : 0;
+    std::cout << "Handler history (latest " << lines.size() - start << ")\n"
+              << "--------------------------------\n";
+    for (std::size_t i = start; i < lines.size(); ++i)
+        std::cout << lines[i] << '\n';
     return 0;
 }
 
@@ -380,6 +417,8 @@ handler::ModuleRegistry buildModules() {
     registry.registerModule("temp-cleanup", [] { return runTempCleanup(); });
     registry.registerModule("maintenance", runMaintenance);
     registry.registerModule("state", runState);
+    registry.registerModule("status", runStatus);
+    registry.registerModule("history", runHistory);
     registry.registerModule("version", [] {
         std::cout << "Handler " << kVersion << "\n";
         return 0;
