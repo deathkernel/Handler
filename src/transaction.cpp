@@ -30,6 +30,10 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
         journal.record("SNAPSHOT", snapshot->id);
     } else {
         journal.record("SNAPSHOT_FAILED", "environment snapshot could not be created");
+        if (risk != RiskLevel::Low) {
+            journal.record("ABORT", "transaction refused because a recovery snapshot was unavailable");
+            return {false, false, false, {}, "transaction aborted: recovery snapshot unavailable"};
+        }
     }
 
     const bool actionOk = action();
