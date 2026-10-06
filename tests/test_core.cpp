@@ -10,6 +10,8 @@
 #include "handler/dependency_manager.h"
 #include "handler/artifact_backup.h"
 #include "handler/state_paths.h"
+#include "handler/component_discovery.h"
+#include "handler/system_info.h"
 
 #include <cassert>
 #include <iostream>
