@@ -668,6 +668,10 @@ int runDeps() {
     }
     const auto info = handler::inspectDependencies(context.root, context.type);
     handler::printDependencies(info);
+    const auto requirements = handler::parseDependencyRequirements(info);
+    const auto conflicts = handler::findDependencyConflicts(requirements);
+    const auto candidates = handler::proposeDependencyUpgrades(requirements);
+    handler::printDependencyAnalysis(conflicts, candidates);
     makeHistory().record("DEPENDENCY_INSPECTION", info.ecosystem);
     return 0;
 }
