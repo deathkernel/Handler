@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <set>
+#include <sstream>
 
 namespace handler {
 
@@ -87,14 +88,13 @@ std::vector<DependencyRequirement> parseDependencyRequirements(const DependencyI
 
 std::vector<DependencyConflict> findDependencyConflicts(
     const std::vector<DependencyRequirement>& requirements) {
-    std::unordered_map<std::string, std::string> seen;
+    std::unordered_map<std::string, std::vector<std::string>> grouped;
+    for (const auto& r : requirements) grouped[r.name].push_back(r.constraint);
     std::vector<DependencyConflict> out;
-    for (const auto& r : requirements) {
-        const auto it = seen.find(r.name);
-        if (it == seen.end()) { seen[r.name] = r.constraint; continue; }
-        if (it->second != r.constraint)
-            out.push_back({r.name, it->second, r.constraint,
-                           "multiple direct requirements impose different constraints"});
+    for (const auto& [name, constraints] : grouped) {
+        if (constraints.size() > 1 && !dependencyConstraintsCompatible(constraints))
+            out.push_back({name, constraints.front(), constraints.back(),
+                           "no version satisfies the combined constraints"});
     }
     return out;
 }
@@ -102,9 +102,13 @@ std::vector<DependencyConflict> findDependencyConflicts(
 std::vector<DependencyCandidate> proposeDependencyUpgrades(
     const std::vector<DependencyRequirement>& requirements) {
     std::vector<DependencyCandidate> out;
-    for (const auto& r : requirements)
-        out.push_back({r.name, "unknown", r.constraint, "REVIEW",
-                       "registry/current-version lookup required before changing the manifest"});
+    for (const auto& r : requirements) {
+        const bool compatible = dependencyConstraintsCompatible({r.constraint});
+        out.push_back({r.name, "unknown", r.constraint,
+                       compatible ? "REVIEW" : "BLOCKED",
+                       compatible ? "registry lookup required before changing the manifest"
+                                  : "constraint is internally unsatisfiable", {}, {}});
+    }
     return out;
 }
 
