@@ -138,12 +138,15 @@ int main() {
     state.timestampUtc = "test";
     state.computerName = "machine";
     state.userName = "user";
-    state.handlerVersion = "0.7.0";
+    state.handlerVersion = "0.8.0";
     const auto snapshot = snapshots.create(state);
     assert(snapshot.has_value());
     assert(snapshots.find(snapshot->id).has_value());
     assert(snapshots.load(*snapshot).has_value());
     assert(snapshots.list().size() == 1);
+    assert(!snapshots.find("../outside").has_value());
+    SnapshotInfo traversal{"../outside", tempRoot / ".." / "outside.state"};
+    assert(!snapshots.load(traversal).has_value());
     std::filesystem::remove_all(tempRoot, ec);
 
     const auto pathRoot = std::filesystem::temp_directory_path() / "handler_path_test";
