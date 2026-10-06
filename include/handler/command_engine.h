@@ -2,6 +2,7 @@
 
 #include "handler/policy.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@ struct CommandSpec {
     std::string executable;
     std::vector<std::string> arguments;
     RiskLevel risk{RiskLevel::Medium};
+    std::uint32_t timeoutMs{120000};
 };
 
 std::string quoteArgument(const std::string& value);
