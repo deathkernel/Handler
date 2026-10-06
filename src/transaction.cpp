@@ -39,17 +39,17 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
 
     const bool actionOk = action();
     if (!actionOk) {
-        if (rollback) rollback();
-        journal.record("ROLLBACK", "action failed");
-        return {false, static_cast<bool>(rollback), snapshot.has_value(),
+        const bool rollbackOk = rollback ? rollback() : false;
+        journal.record("ROLLBACK", rollbackOk ? "action failed; rollback verified by callback" : "action failed; rollback failed or unavailable");
+        return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{}, "action failed; rollback invoked"};
     }
 
     const auto verification = verify();
     if (!verification.passed) {
-        if (rollback) rollback();
-        journal.record("ROLLBACK", "verification failed: " + verification.details);
-        return {false, static_cast<bool>(rollback), snapshot.has_value(),
+        const bool rollbackOk = rollback ? rollback() : false;
+        journal.record("ROLLBACK", rollbackOk ? "verification failed; rollback verified by callback" : "verification failed; rollback failed or unavailable");
+        return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{},
                 "verification failed; rollback invoked"};
     }
