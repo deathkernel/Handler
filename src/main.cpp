@@ -84,6 +84,8 @@ int runSafeMode() {
     return c.enabled ? 0 : 1;
 }
 
+handler::ProjectContext currentProject();
+
 int runDoctor() {
     std::cout << "Handler Doctor\n==============\n";
     const auto health = handler::inspectSystem();
@@ -191,7 +193,8 @@ void printUsage() {
         << "  handler graph                  Show dependency edges\n"
         << "  handler decide <error text>    Generate repair decisions\n"
         << "  handler command <tool> [...]   Execute an allowlisted command\n"
-        << "  handler protect                Run protection diagnostics\n        << "  handler doctor                 Run complete deterministic diagnostics\n";"
+        << "  handler protect                Run protection diagnostics\n"
+        << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler updates                Inspect tool updates\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler safe-mode              Prepare isolated sandbox context\n"
