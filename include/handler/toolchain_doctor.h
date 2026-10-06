@@ -15,6 +15,7 @@ struct ToolchainRepair {
     bool supported{false};
     std::string command;
     std::string reason;
+    std::string packageId;
 };
 std::vector<ToolchainFinding> inspectToolchain(const std::vector<std::string>& tools);
 std::vector<ToolchainRepair> proposeToolchainRepairs(const std::vector<ToolchainFinding>& findings);

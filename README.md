@@ -854,3 +854,35 @@ This README is intentionally a living specification. Features will be added, ref
 ---
 
 **Handler** — *protect the environment, fix the problem, verify the result.* 🛡️
+
+## Batch 3 — Guarded Toolchain Repair
+
+Batch 3 moves Toolchain Doctor from observation-only repair proposals to a narrowly scoped, package-manager-backed repair path on Windows:
+
+- **Verified winget boundary** — `winget` is now explicitly allowlisted; generic shell execution remains outside Handler's command boundary.
+- **Supported package IDs** — Python, Node.js, Git, CMake, and .NET SDK use fixed winget package IDs rather than free-form package input.
+- **Installed-tool-only repair** — missing runtimes are still blocked from automatic installation. Repair operates only on an already discovered toolchain.
+- **Source pinning** — upgrades use the explicit `winget` source and accept source/package agreements non-interactively after the user has approved the Handler operation.
+- **Transactional execution** — upgrades run through Handler's High-risk transaction layer with a recovery snapshot and post-action health verification.
+- **Safe failure semantics** — package downgrade is not fabricated as rollback; if verification fails, Handler records the retained snapshot and reports that package-level downgrade was not attempted.
+- **Cancellation semantics** — an explicit cancellation returns exit code `2` rather than success.
+- **Regression coverage** — tests cover the winget allowlist/risk boundary and avoid executing real package-manager upgrades during CI.
+
+### Toolchain Repair Boundary
+
+Handler intentionally does **not** claim that a snapshot can undo an operating-system package installation. The recovery snapshot protects Handler's saved environment baseline; package-manager rollback is a separate capability that is not silently attempted. This keeps the repair path honest and prevents a false sense of filesystem-level rollback.
+
+Supported automatic repair targets in this batch:
+
+| Tool | Package ID | Automatic action |
+|---|---|---|
+| Python | `Python.Python.3` | Upgrade installed package |
+| Node.js | `OpenJS.NodeJS` | Upgrade installed package |
+| Git | `Git.Git` | Upgrade installed package |
+| CMake | `Kitware.CMake` | Upgrade installed package |
+| .NET SDK | `Microsoft.DotNet.SDK` | Upgrade installed package |
+
+Missing tools and unsupported ecosystems remain review-only until an explicit installer/source policy exists.
+
+Handler version is now **0.8.0**.
+

@@ -26,6 +26,13 @@ CommandRiskResult inspectCommandRisk(const std::string& commandLine) {
         s.find("set ") != std::string::npos)
         return {CommandRisk::Review, "command can modify environment state"};
 
+    if (s.find("winget uninstall") != std::string::npos)
+        return {CommandRisk::Blocked, "toolchain removal is outside the automatic repair boundary"};
+
+    if (s.find("winget install") != std::string::npos ||
+        s.find("winget upgrade") != std::string::npos)
+        return {CommandRisk::Review, "package-manager operation can modify installed software"};
+
     return {CommandRisk::Safe, "no high-risk pattern detected"};
 }
 
@@ -53,7 +60,9 @@ RiskLevel classifyCommandRisk(const std::string& executable,
         lower.find("pip install") != std::string::npos ||
         lower.find("npm install") != std::string::npos ||
         lower.find("git fetch") != std::string::npos ||
-        lower.find("git pull") != std::string::npos;
+        lower.find("git pull") != std::string::npos ||
+        lower.find("winget upgrade") != std::string::npos ||
+        lower.find("winget install") != std::string::npos;
 
     if (versionQuery) return RiskLevel::Low;
     if (installOrUpdate) return RiskLevel::High;

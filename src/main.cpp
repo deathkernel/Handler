@@ -41,7 +41,7 @@
 #include <vector>
 
 namespace {
-constexpr const char* kVersion = "0.7.0";
+constexpr const char* kVersion = "0.8.0";
 
 std::filesystem::path stateRoot() {
     if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
@@ -113,7 +113,7 @@ int runToolchainRepair(const std::string& tool) {
     if (answer != "y" && answer != "Y") {
         makeHistory().record("TOOLCHAIN_REPAIR_CANCELLED", tool);
         std::cout << "Toolchain repair cancelled.\n";
-        return 0;
+        return handler::kRepairCancelled;
     }
     std::string details;
     const bool ok = handler::repairToolchain(tool, details);
