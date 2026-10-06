@@ -66,6 +66,7 @@ int runUpdates() {
              {"python", "node", "git", "cmake", "dotnet"})) {
         std::cout << u.tool << ": "
                   << (u.currentPath.empty() ? "missing" : u.currentPath)
+                  << " | " << u.currentVersion
                   << " | " << u.updateHint << "\n";
     }
     return 0;
