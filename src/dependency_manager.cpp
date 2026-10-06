@@ -34,7 +34,7 @@ DependencyInfo inspectDependencies(const std::filesystem::path& root,
         std::ifstream input(root / "package.json");
         std::string line;
         const std::regex dependencyLine(
-            R"(^\s*"([^"]+)"\s*:\s*"([^"]+)")");
+            R"DELIM(^\s*"([^"]+)"\s*:\s*"([^"]+)")DELIM");
         while (std::getline(input, line)) {
             std::smatch match;
             if (std::regex_search(line, match, dependencyLine))
