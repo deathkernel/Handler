@@ -10,6 +10,7 @@
 #include "handler/dependency_manager.h"
 #include "handler/artifact_backup.h"
 #include "handler/state_paths.h"
+#include "handler/recovery_journal.h"
 
 #include <cassert>
 #include <iostream>
@@ -117,6 +118,18 @@ int main() {
     const auto tempRoot = std::filesystem::temp_directory_path() / "handler_snapshot_test";
     std::error_code ec;
     std::filesystem::remove_all(tempRoot, ec);
+
+    const auto journalRoot = std::filesystem::temp_directory_path() / "handler_journal_test";
+    std::filesystem::remove_all(journalRoot, ec);
+    RecoveryJournal journal(journalRoot / "recovery.log");
+    assert(journal.record("START", "test transaction"));
+    assert(journal.record("COMMIT", "verified"));
+    const auto entries = journal.read();
+    assert(entries.size() == 2);
+    assert(entries[0].stage == "START");
+    assert(entries[0].details == "test transaction");
+    assert(entries[1].stage == "COMMIT");
+    std::filesystem::remove_all(journalRoot, ec);
     SnapshotStore snapshots(tempRoot);
     EnvironmentState state;
     state.timestampUtc = "test";
@@ -128,6 +141,12 @@ int main() {
     assert(snapshots.find(snapshot->id).has_value());
     assert(snapshots.load(*snapshot).has_value());
     assert(snapshots.list().size() == 1);
+
+    // Force the same timestamp-derived ID twice; the second snapshot must not overwrite the first.
+    const auto snapshot2 = snapshots.create(state);
+    assert(snapshot2.has_value());
+    assert(snapshot2->id != snapshot->id);
+    assert(snapshots.list().size() == 2);
     std::filesystem::remove_all(tempRoot, ec);
 
     const auto pathRoot = std::filesystem::temp_directory_path() / "handler_path_test";
