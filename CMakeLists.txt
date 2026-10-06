@@ -70,6 +70,7 @@ add_executable(handler_tests
     src/snapshot.cpp
     src/environment_state.cpp
     src/path_guardian.cpp
+    src/environment_guardian.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
