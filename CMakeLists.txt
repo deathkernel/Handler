@@ -78,4 +78,9 @@ add_executable(handler_tests
 
 target_include_directories(handler_tests PRIVATE include)
 
+if (WIN32)
+    target_compile_definitions(handler_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(handler_tests PRIVATE Ws2_32)
+endif()
+
 add_test(NAME handler_core_tests COMMAND handler_tests)
