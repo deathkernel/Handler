@@ -725,6 +725,20 @@ It is not intended to replace:
 - Enterprise endpoint management
 - General-purpose AI coding assistants
 
+
+## Batch 1 — Dependency Intelligence
+
+Batch 1 adds the first production-oriented dependency intelligence layer:
+
+- **Version constraint solving** for exact/comparison ranges plus common `^` and `~` ranges.
+- **Constraint intersection checks** so conflicting requirements are reported only when no supported version satisfies the combined constraints.
+- **Compatible-version selection** chooses the highest compatible version from registry-discovered candidates.
+- **Transitive dependency closure** expands known dependency edges and performs reverse impact traversal for affected projects/packages.
+- **Guarded package upgrades** support Python and Node.js through registry lookup, explicit user confirmation, Handler transactions, artifact backups, post-install verification, and recovery journaling.
+- CLI support: `handler deps --upgrade <package>` and `handler dependency-upgrade <package>`.
+
+The solver is intentionally deterministic and conservative. It does not silently upgrade packages, and registry-backed changes remain confirmation-gated. Full ecosystem-specific lockfile solving and installer support for Rust/Go/C++ remain later work.
+
 ## Project Status
 
 🚧 **Level 6 — Maintenance & Advanced Operations Foundation Implemented**
