@@ -69,7 +69,7 @@ int main() {
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
     assert(graph[0].source == "demo");
-    const transitive = buildTransitiveDependencyGraph(
+    const std::vector<DependencyEdge> transitive = buildTransitiveDependencyGraph(
         graph, {{"flask", "werkzeug", "transitive"}, {"demo", "requests", "declares"}});
     assert(transitive.size() == 4);
     const werkzeugImpact = analyzeDependencyImpact(transitive, "werkzeug");
