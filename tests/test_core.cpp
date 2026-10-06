@@ -5,6 +5,7 @@
 #include "handler/risky_command.h"
 #include "handler/snapshot.h"
 #include "handler/path_guardian.h"
+#include "handler/environment_guardian.h"
 
 #include <cassert>
 #include <iostream>
@@ -65,6 +66,19 @@ int main() {
     assert(loadPathBaseline(baseline, loaded));
     assert(!loaded.empty());
     std::filesystem::remove_all(pathRoot, ec);
+
+    const auto envRoot = std::filesystem::temp_directory_path() / "handler_env_test";
+    std::filesystem::remove_all(envRoot, ec);
+    const auto envFile = envRoot / "environment.baseline";
+    assert(saveEnvironmentBaseline(envFile, {"PATH", "TEMP"}));
+    std::vector<EnvironmentEntry> envEntries;
+    assert(loadEnvironmentBaseline(envFile, envEntries));
+    assert(!envEntries.empty());
+    const auto envDiff = compareEnvironmentBaseline(envEntries);
+    assert(envDiff.missing.empty());
+    assert(!isSensitiveVariable("API_TOKEN"));
+    assert(isSensitiveVariable("NORMAL_VALUE") == false);
+    std::filesystem::remove_all(envRoot, ec);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
