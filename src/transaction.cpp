@@ -12,7 +12,7 @@ Transaction::Transaction(SafetyMode mode) : mode_(mode) {}
 
 TransactionResult Transaction::run(RiskLevel risk, const Action& action,
                                    const Verify& verify, const Rollback& rollback) {
-    const auto decision = evaluatePolicy(mode_, risk);
+    const auto decision = preApproved_ ? PolicyDecision{true, false, "explicitly pre-confirmed"} : evaluatePolicy(mode_, risk);
     if (!decision.allowed)
         return {false, false, false, {}, decision.reason};
 
@@ -70,14 +70,9 @@ TransactionResult Transaction::runApproved(RiskLevel risk, const Action& action,
                                            const Verify& verify, const Rollback& rollback) {
     if (!action || !verify)
         return {false, false, false, {}, "invalid transaction callbacks"};
-    const auto previous = mode_;
-    mode_ = SafetyMode::Auto;
-    const auto result = [&] {
-        const auto decision = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
-        if (!decision.allowed) return TransactionResult{false, false, false, {}, "pre-confirmed transaction rejected"};
-        return run(RiskLevel::Low, action, verify, rollback);
-    }();
-    mode_ = previous;
+    preApproved_ = true;
+    const auto result = run(risk, action, verify, rollback);
+    preApproved_ = false;
     return result;
 }
 
