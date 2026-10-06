@@ -26,10 +26,6 @@ const WingetTarget* wingetTarget(const std::string& tool) {
     return it == targets.end() ? nullptr : &it->second;
 }
 
-std::string versionCommand(const std::string& tool) {
-    if (tool == "npm") return "npm --version";
-    return tool + " --version";
-}
 
 std::string firstLine(const std::string& text) {
     const auto p = text.find_first_of("\r\n");
@@ -125,16 +121,19 @@ std::vector<ToolchainRepair> proposeToolchainRepairs(
 }
 
 bool repairToolchain(const std::string& tool, std::string& details) {
+#ifndef _WIN32
+    details = "automatic toolchain repair is not enabled on this platform; inspect the toolchain and use an explicit package-manager action";
+    return false;
+#else
     const auto* target = wingetTarget(tool);
     if (!target) {
         details = "automatic repair source is not defined for " + tool;
         return false;
     }
 
-#ifndef _WIN32
+
     details = "winget toolchain repair is Windows-only";
     return false;
-#else
     const auto finding = inspectToolchain({tool});
     if (finding.empty() || !finding.front().available) {
         details = "toolchain repair requires an already installed runtime; missing tools need explicit installation";
