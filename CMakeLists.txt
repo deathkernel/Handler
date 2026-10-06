@@ -79,6 +79,7 @@ add_executable(handler_tests
     src/history.cpp
     src/artifact_backup.cpp
     src/state_paths.cpp
+    src/system_info.cpp
     src/transaction.cpp
     src/recovery_journal.cpp
 )
