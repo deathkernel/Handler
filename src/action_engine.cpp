@@ -125,25 +125,52 @@ ActionResult executeCommand(const CommandSpec& command) {
         return {false, -1, {}, "failed to start process"};
     }
 
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                &limits, sizeof(limits));
+        AssignProcessToJobObject(job, process.hProcess);
+    }
+
+    const DWORD timeout = command.timeoutMs == 0 ? 120000 : command.timeoutMs;
+    const DWORD wait = WaitForSingleObject(process.hProcess, timeout);
+
+    if (wait == WAIT_TIMEOUT) {
+        if (job) {
+            CloseHandle(job);
+            job = nullptr;
+        } else {
+            TerminateProcess(process.hProcess, 124);
+            WaitForSingleObject(process.hProcess, 5000);
+        }
+        CloseHandle(readPipe);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        return {true, 124, {}, "command timed out and was terminated"};
+    }
+
     std::string output;
     std::array<char, 4096> buffer{};
     DWORD bytesRead = 0;
-
     while (ReadFile(readPipe, buffer.data(),
                     static_cast<DWORD>(buffer.size()),
                     &bytesRead, nullptr) && bytesRead > 0)
         output.append(buffer.data(), bytesRead);
 
     CloseHandle(readPipe);
-    WaitForSingleObject(process.hProcess, INFINITE);
 
     DWORD exitCode = 1;
     if (!GetExitCodeProcess(process.hProcess, &exitCode)) {
+        if (job) CloseHandle(job);
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
         return {true, -1, output, "failed to read process exit code"};
     }
 
+    if (job) CloseHandle(job);
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);
 
