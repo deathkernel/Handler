@@ -403,8 +403,9 @@ int runState() {
 
 int runMaintenance() {
     handler::MaintenanceLoop loop(std::chrono::hours(2));
+    std::cout << "Maintenance mode is non-interactive; destructive TEMP cleanup is skipped.\n";
     loop.run([] {
-        runTempCleanup();
+        runTempCleanup(true);
         runState();
     });
     return 0;
