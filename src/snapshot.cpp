@@ -24,7 +24,12 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
     std::filesystem::create_directories(root_, ec);
     if (ec) return std::nullopt;
 
-    const std::string id = snapshotId();
+    std::string id = snapshotId();
+    std::error_code collisionEc;
+    for (unsigned int suffix = 0; std::filesystem::exists(root_ / (id + ".state"), collisionEc); ++suffix) {
+        if (collisionEc) return std::nullopt;
+        id = snapshotId() + "-" + std::to_string(suffix + 1);
+    }
     const auto path = root_ / (id + ".state");
     std::ofstream out(path, std::ios::trunc);
     if (!out) return std::nullopt;
@@ -42,7 +47,19 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
 }
 
 std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot) const {
-    std::ifstream in(snapshot.path);
+    if (snapshot.id.empty() || snapshot.id.size() > 64 ||
+        !std::all_of(snapshot.id.begin(), snapshot.id.end(),
+                     [](unsigned char ch) { return std::isdigit(ch) || ch == '-'; }))
+        return std::nullopt;
+
+    std::error_code ec;
+    const auto canonicalRoot = std::filesystem::weakly_canonical(root_, ec);
+    if (ec) return std::nullopt;
+    const auto canonicalPath = std::filesystem::weakly_canonical(snapshot.path, ec);
+    if (ec || canonicalPath.parent_path() != canonicalRoot)
+        return std::nullopt;
+
+    std::ifstream in(canonicalPath);
     if (!in) return std::nullopt;
 
     EnvironmentState state;
@@ -79,7 +96,10 @@ std::vector<SnapshotInfo> SnapshotStore::list() const {
 }
 
 std::optional<SnapshotInfo> SnapshotStore::find(const std::string& id) const {
-    if (id.empty()) return std::nullopt;
+    if (id.empty() || id.size() > 64 ||
+        !std::all_of(id.begin(), id.end(),
+                     [](unsigned char ch) { return std::isdigit(ch) || ch == '-'; }))
+        return std::nullopt;
     const auto path = root_ / (id + ".state");
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec)) return std::nullopt;
