@@ -157,13 +157,17 @@ int main() {
     const auto envRoot = std::filesystem::temp_directory_path() / "handler_env_test";
     std::filesystem::remove_all(envRoot, ec);
     const auto envFile = envRoot / "environment.baseline";
+#ifdef _WIN32
     assert(saveEnvironmentBaseline(envFile, {"PATH", "TEMP"}));
+#else
+    assert(saveEnvironmentBaseline(envFile, {"PATH", "TMPDIR"}));
+#endif
     std::vector<EnvironmentEntry> envEntries;
     assert(loadEnvironmentBaseline(envFile, envEntries));
     assert(!envEntries.empty());
     const auto envDiff = compareEnvironmentBaseline(envEntries);
     assert(envDiff.missing.empty());
-    assert(!isSensitiveVariable("API_TOKEN"));
+    assert(isSensitiveVariable("API_TOKEN"));
     assert(isSensitiveVariable("NORMAL_VALUE") == false);
     std::filesystem::remove_all(envRoot, ec);
 
