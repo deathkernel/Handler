@@ -40,12 +40,14 @@ add_executable(handler
     src/safe_mode.cpp
     src/deep_cleanup.cpp
     src/uninstall.cpp
+    src/repair.cpp
 )
 
 target_include_directories(handler PRIVATE include)
 
 if (WIN32)
     target_compile_definitions(handler PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(handler PRIVATE Ws2_32)
 endif()
 
 if (MSVC)
@@ -53,3 +55,17 @@ if (MSVC)
 else()
     target_compile_options(handler PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+enable_testing()
+
+add_executable(handler_tests
+    tests/test_core.cpp
+    src/error_detection.cpp
+    src/dependency_graph.cpp
+    src/policy.cpp
+    src/command_engine.cpp
+)
+
+target_include_directories(handler_tests PRIVATE include)
+
+add_test(NAME handler_core_tests COMMAND handler_tests)
