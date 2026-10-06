@@ -39,7 +39,7 @@ EnvironmentState captureEnvironmentState() {
     state.tempPath = env("TEMP");
     state.pathValue = env("PATH");
     state.currentDirectory = std::filesystem::current_path();
-    state.handlerVersion = "0.1.0";
+    state.handlerVersion = "0.7.0";
     return state;
 }
 
