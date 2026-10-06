@@ -2,6 +2,7 @@
 #include "handler/dependency_graph.h"
 #include "handler/error_detection.h"
 #include "handler/policy.h"
+#include "handler/risky_command.h"
 
 #include <cassert>
 #include <iostream>
@@ -23,6 +24,12 @@ int main() {
 
     const auto high = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     assert(!high.allowed && high.requiresConfirmation);
+
+    const auto safeRisk = classifyCommandRisk("python", {"--version"});
+    assert(safeRisk == RiskLevel::Low);
+    const auto installRisk = classifyCommandRisk("npm", {"install", "express"});
+    assert(installRisk == RiskLevel::High);
+
 
     const auto errors = detectErrors("ModuleNotFoundError: No module named 'requests'");
     assert(!errors.empty());
