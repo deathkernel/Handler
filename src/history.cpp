@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace handler {
 
@@ -38,8 +39,7 @@ bool History::record(const std::string& event, const std::string& details) const
 
     out << nowUtc() << " | " << event;
     if (!details.empty()) out << " | " << details;
-    out << '
-';
+    out << '\n';
     return static_cast<bool>(out);
 }
 
