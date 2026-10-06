@@ -4,6 +4,8 @@
 #include "handler/history.h"
 #include "handler/policy.h"
 #include "handler/project_context.h"
+#include "handler/transaction.h"
+#include "handler/verification.h"
 
 #include <cctype>
 #include <cstdlib>
@@ -81,12 +83,15 @@ int repairPythonModule(const char* rawPackage) {
     }
 
     const auto pythonPath = pythonExecutableForCurrentContext();
-    const std::string target =
-        pythonPath.empty() ? "PATH Python" : pythonPath.string();
+    const std::string target = pythonPath.empty() ? "PATH Python" : pythonPath.string();
+    std::cout << "Python repair requested for: " << package << "\n"
+              << "Target interpreter: " << target << "\n";
 
-    std::cout << "Python repair requested for: " << package << "\n";
-    std::cout << "Target interpreter: " << target << "\n";
-    std::cout << "Handler will run: python -m pip install " << package << "\n";
+    CommandSpec precheck{"python-repair-precheck", "python",
+                         {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
+    precheck.executablePath = pythonPath;
+    const auto before = executeCommand(precheck);
+    const bool wasInstalled = before.started && before.exitCode == 0;
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
@@ -99,44 +104,47 @@ int repairPythonModule(const char* rawPackage) {
         }
     }
 
-    CommandSpec install{
-        "python-repair",
-        "python",
-        {"-m", "pip", "install", package, "--disable-pip-version-check"},
+    Transaction tx(SafetyMode::Confirm);
+    const auto result = tx.runApproved(
         RiskLevel::High,
-        180000
-    };
-    install.executablePath = pythonPath;
-
-    const auto installResult = executeCommand(install);
-    std::cout << installResult.output;
+        [&] {
+            CommandSpec install{"python-repair", "python",
+                {"-m", "pip", "install", package, "--disable-pip-version-check"},
+                RiskLevel::High, 180000};
+            install.executablePath = pythonPath;
+            const auto r = executeCommand(install);
+            std::cout << r.output;
+            return r.started && r.exitCode == 0;
+        },
+        [&] {
+            CommandSpec verify{"python-repair-verify", "python",
+                {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
+            verify.executablePath = pythonPath;
+            const auto r = executeCommand(verify);
+            return VerificationResult{r.started && r.exitCode == 0,
+                                      "pip show", r.error};
+        },
+        [&] {
+            if (wasInstalled) return;
+            CommandSpec rollback{"python-repair-rollback", "python",
+                {"-m", "pip", "uninstall", "-y", package,
+                 "--disable-pip-version-check"}, RiskLevel::High, 120000};
+            rollback.executablePath = pythonPath;
+            (void)executeCommand(rollback);
+        });
 
     History history(repairStateRoot() / "history.log");
-    if (!installResult.started || installResult.exitCode != 0) {
+    if (!result.committed) {
         history.record("PYTHON_REPAIR_FAILED",
-                       package + " | " + installResult.error);
-        std::cerr << "Repair failed. No further action taken.\n";
-        return installResult.started ? installResult.exitCode : 1;
-    }
-
-    CommandSpec verify{
-        "python-repair-verify",
-        "python",
-        {"-m", "pip", "show", package},
-        RiskLevel::Low,
-        30000
-    };
-    verify.executablePath = pythonPath;
-
-    const auto verifyResult = executeCommand(verify);
-    if (!verifyResult.started || verifyResult.exitCode != 0) {
-        history.record("PYTHON_REPAIR_UNVERIFIED", package);
-        std::cerr << "Package installation completed but verification failed.\n";
+                       package + " | " + result.details +
+                       " | snapshot=" + result.snapshotId);
+        std::cerr << "Python repair did not commit: " << result.details << "\n";
         return 1;
     }
 
-    std::cout << "Repair verified: " << package << " is installed.\n";
-    history.record("PYTHON_REPAIR_SUCCESS", package + " | " + target);
+    std::cout << "Repair verified and committed: " << package << "\n";
+    history.record("PYTHON_REPAIR_SUCCESS",
+                   package + " | " + target + " | snapshot=" + result.snapshotId);
     return 0;
 }
 
@@ -153,9 +161,14 @@ int repairNodeModule(const char* rawPackage) {
         return 3;
     }
 
-    std::cout << "Node repair requested for: " << package << "\n";
-    std::cout << "Target project: " << projectRoot << "\n";
-    std::cout << "Handler will run: npm install " << package << "\n";
+    std::cout << "Node repair requested for: " << package << "\n"
+              << "Target project: " << projectRoot << "\n";
+
+    CommandSpec precheck{"node-repair-precheck", "npm",
+                         {"ls", package, "--depth=0"}, RiskLevel::Low, 30000};
+    precheck.workingDirectory = projectRoot;
+    const auto before = executeCommand(precheck);
+    const bool wasInstalled = before.started && before.exitCode == 0;
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
@@ -168,45 +181,48 @@ int repairNodeModule(const char* rawPackage) {
         }
     }
 
-    CommandSpec install{
-        "node-repair",
-        "npm",
-        {"install", package, "--no-audit", "--no-fund"},
+    Transaction tx(SafetyMode::Confirm);
+    const auto result = tx.runApproved(
         RiskLevel::High,
-        180000
-    };
-    install.workingDirectory = projectRoot;
-
-    const auto installResult = executeCommand(install);
-    std::cout << installResult.output;
+        [&] {
+            CommandSpec install{"node-repair", "npm",
+                {"install", package, "--no-audit", "--no-fund"},
+                RiskLevel::High, 180000};
+            install.workingDirectory = projectRoot;
+            const auto r = executeCommand(install);
+            std::cout << r.output;
+            return r.started && r.exitCode == 0;
+        },
+        [&] {
+            CommandSpec verify{"node-repair-verify", "npm",
+                {"ls", package, "--depth=0"}, RiskLevel::Low, 30000};
+            verify.workingDirectory = projectRoot;
+            const auto r = executeCommand(verify);
+            return VerificationResult{r.started && r.exitCode == 0,
+                                      "npm ls", r.error};
+        },
+        [&] {
+            if (wasInstalled) return;
+            CommandSpec rollback{"node-repair-rollback", "npm",
+                {"uninstall", package, "--no-audit", "--no-fund"},
+                RiskLevel::High, 120000};
+            rollback.workingDirectory = projectRoot;
+            (void)executeCommand(rollback);
+        });
 
     History history(repairStateRoot() / "history.log");
-    if (!installResult.started || installResult.exitCode != 0) {
+    if (!result.committed) {
         history.record("NODE_REPAIR_FAILED",
-                       package + " | " + installResult.error);
-        std::cerr << "Repair failed. No further action taken.\n";
-        return installResult.started ? installResult.exitCode : 1;
-    }
-
-    CommandSpec verify{
-        "node-repair-verify",
-        "npm",
-        {"ls", package, "--depth=0"},
-        RiskLevel::Low,
-        30000
-    };
-    verify.workingDirectory = projectRoot;
-
-    const auto verifyResult = executeCommand(verify);
-    if (!verifyResult.started || verifyResult.exitCode != 0) {
-        history.record("NODE_REPAIR_UNVERIFIED", package);
-        std::cerr << "Package installation completed but verification failed.\n";
+                       package + " | " + result.details +
+                       " | snapshot=" + result.snapshotId);
+        std::cerr << "Node repair did not commit: " << result.details << "\n";
         return 1;
     }
 
-    std::cout << "Repair verified: " << package << " is installed.\n";
+    std::cout << "Repair verified and committed: " << package << "\n";
     history.record("NODE_REPAIR_SUCCESS",
-                   package + " | " + projectRoot.string());
+                   package + " | " + projectRoot.string() +
+                   " | snapshot=" + result.snapshotId);
     return 0;
 }
 
