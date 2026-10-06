@@ -125,6 +125,20 @@ int runDoctor() {
     return 0;
 }
 
+int runPathAudit() {
+    const auto plan = handler::analyzePathEntries();
+    std::cout << "PATH audit\n----------\n"
+              << "Missing entries : " << plan.missingEntries.size() << "\n"
+              << "Duplicate entries: " << plan.duplicateEntries.size() << "\n"
+              << "Mode: " << plan.details << "\n";
+    for (const auto& e : plan.missingEntries) std::cout << "  [MISSING] " << e << "\n";
+    for (const auto& e : plan.duplicateEntries) std::cout << "  [DUPLICATE] " << e << "\n";
+    makeHistory().record("PATH_AUDIT",
+        "missing=" + std::to_string(plan.missingEntries.size()) +
+        ", duplicates=" + std::to_string(plan.duplicateEntries.size()));
+    return 0;
+}
+
 int runProtection() {
     handler::printEnvironmentHealth(handler::inspectEnvironmentHealth());
     for (const auto& f : handler::inspectPathEntries())
@@ -205,6 +219,7 @@ void printUsage() {
         << "  handler graph                  Show dependency edges\n"
         << "  handler decide <error text>    Generate repair decisions\n"
         << "  handler command <tool> [...]   Execute an allowlisted command\n"
+        << "  handler path-audit             Audit PATH without modifying the OS\n"
         << "  handler protect                Run protection diagnostics\n"
         << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler updates                Inspect tool updates\n"
@@ -501,6 +516,7 @@ int main(int argc, char* argv[]) {
 
     const std::string command = argv[1];
 
+    if (command == "path-audit") return runPathAudit();
     if (command == "protect") return runProtection();
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
