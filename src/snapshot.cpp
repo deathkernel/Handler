@@ -2,8 +2,8 @@
 
 #include <chrono>
 #include <fstream>
-#include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace handler {
 
@@ -28,12 +28,12 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
     std::ofstream out(path, std::ios::trunc);
     if (!out) return std::nullopt;
 
-    out << "timestamp=" << state.timestampUtc << '\n'
+    out << "timestamp_utc=" << state.timestampUtc << '\n'
         << "computer_name=" << state.computerName << '\n'
         << "user_name=" << state.userName << '\n'
         << "temp_path=" << state.tempPath << '\n'
         << "path=" << state.pathValue << '\n'
-        << "current_directory=" << state.currentDirectory << '\n'
+        << "current_directory=" << state.currentDirectory.string() << '\n'
         << "handler_version=" << state.handlerVersion << '\n';
 
     if (!out.good()) return std::nullopt;
@@ -51,7 +51,8 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
         if (pos == std::string::npos) continue;
         const auto key = line.substr(0, pos);
         const auto value = line.substr(pos + 1);
-        if (key == "timestamp") state.timestampUtc = value;
+
+        if (key == "timestamp_utc") state.timestampUtc = value;
         else if (key == "computer_name") state.computerName = value;
         else if (key == "user_name") state.userName = value;
         else if (key == "temp_path") state.tempPath = value;
