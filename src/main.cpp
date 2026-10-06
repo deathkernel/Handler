@@ -125,6 +125,64 @@ int runDoctor() {
     return 0;
 }
 
+int runPathRepair(const std::string& baselineFile) {
+    std::filesystem::path baseline = baselineFile;
+    if (!std::filesystem::exists(baseline)) {
+        std::cerr << "PATH repair blocked: baseline not found: " << baseline << "\n";
+        return 2;
+    }
+    std::vector<std::string> entries;
+    if (!handler::loadPathBaseline(baseline, entries) || entries.empty()) {
+        std::cerr << "PATH repair blocked: invalid or empty baseline.\n";
+        return 2;
+    }
+    std::cout << "PATH repair will restore " << entries.size()
+              << " baseline entries and may modify the persistent user PATH. [y/N]: ";
+    std::string answer;
+    std::getline(std::cin, answer);
+    if (answer != "y" && answer != "Y") {
+        std::cout << "PATH repair cancelled.\n";
+        makeHistory().record("PATH_REPAIR_CANCELLED");
+        return 0;
+    }
+
+    const auto rollbackFile = stateRoot() / "transactions" / "path-rollback.baseline";
+    if (!handler::savePathBaseline(rollbackFile)) {
+        std::cerr << "PATH repair blocked: current PATH could not be backed up.\n";
+        return 1;
+    }
+
+    handler::Transaction tx(handler::SafetyMode::Confirm);
+    const auto result = tx.runApproved(
+        handler::RiskLevel::High,
+        [&] {
+            std::string details;
+            const bool ok = handler::restorePathFromBaseline(baseline, details);
+            std::cout << details << "\n";
+            return ok;
+        },
+        [&] {
+            std::string current;
+            const bool ok = handler::analyzePathEntries().details.find("diagnostic") != std::string::npos;
+            return handler::VerificationResult{ok, "PATH inspection", current};
+        },
+        [&] {
+            std::string details;
+            (void)handler::restorePathFromBaseline(rollbackFile, details);
+        });
+
+    if (!result.committed) {
+        makeHistory().record("PATH_REPAIR_FAILED",
+            result.details + " | snapshot=" + result.snapshotId);
+        std::cerr << "PATH repair did not commit: " << result.details << "\n";
+        return 1;
+    }
+    makeHistory().record("PATH_REPAIR_SUCCESS",
+        "baseline=" + baseline.string() + " | snapshot=" + result.snapshotId);
+    std::cout << "PATH repair verified and committed.\n";
+    return 0;
+}
+
 int runPathAudit() {
     const auto plan = handler::analyzePathEntries();
     std::cout << "PATH audit\n----------\n"
@@ -220,6 +278,7 @@ void printUsage() {
         << "  handler decide <error text>    Generate repair decisions\n"
         << "  handler command <tool> [...]   Execute an allowlisted command\n"
         << "  handler path-audit             Audit PATH without modifying the OS\n"
+        << "  handler path-repair <baseline> Restore PATH from a trusted baseline\n"
         << "  handler protect                Run protection diagnostics\n"
         << "  handler doctor                 Run complete deterministic diagnostics\n"
         << "  handler updates                Inspect tool updates\n"
@@ -517,6 +576,10 @@ int main(int argc, char* argv[]) {
     const std::string command = argv[1];
 
     if (command == "path-audit") return runPathAudit();
+    if (command == "path-repair") {
+        if (argc < 3) { std::cerr << "Usage: handler path-repair <baseline-file>\\n"; return 2; }
+        return runPathRepair(argv[2]);
+    }
     if (command == "protect") return runProtection();
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
