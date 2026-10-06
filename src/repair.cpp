@@ -217,6 +217,7 @@ int repairNodeModule(const char* rawPackage) {
                                       "npm ls", r.error};
         },
         [&] {
+            for (const auto& backup : backups) (void)restoreArtifact(backup);
             if (wasInstalled) return;
             CommandSpec rollback{"node-repair-rollback", "npm",
                 {"uninstall", package, "--no-audit", "--no-fund"},
