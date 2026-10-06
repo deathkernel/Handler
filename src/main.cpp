@@ -304,10 +304,9 @@ int runEnvironmentRepair(const std::string& file, bool userScope) {
         },
         [&] {
             std::vector<handler::EnvironmentEntry> rollback;
-            if (handler::loadEnvironmentBaseline(rollbackFile, rollback)) {
-                std::string details;
-                (void)handler::restoreEnvironmentEntries(rollback, scope, details);
-            }
+            if (!handler::loadEnvironmentBaseline(rollbackFile, rollback)) return false;
+            std::string details;
+            return handler::restoreEnvironmentEntries(rollback, scope, details);
         });
     if (!result.committed) {
         makeHistory().record("ENVIRONMENT_REPAIR_FAILED",
@@ -372,7 +371,7 @@ int runPathRepair(const std::string& baselineFile) {
         },
         [&] {
             std::string details;
-            (void)handler::restorePathFromBaseline(rollbackFile, details);
+            return handler::restorePathFromBaseline(rollbackFile, details);
         });
 
     if (!result.committed) {
