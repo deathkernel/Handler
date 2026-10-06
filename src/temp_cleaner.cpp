@@ -36,6 +36,10 @@ CleanupResult cleanTempDirectory(const std::filesystem::path& tempDirectory, boo
     if (tempDirectory.empty() || !std::filesystem::exists(tempDirectory, ec) ||
         !std::filesystem::is_directory(tempDirectory, ec)) return result;
 
+    const auto canonicalTemp = std::filesystem::weakly_canonical(tempDirectory, ec);
+    if (ec || canonicalTemp.empty() || canonicalTemp == canonicalTemp.root_path())
+        return result;
+
     for (const auto& entry : std::filesystem::directory_iterator(
              tempDirectory, std::filesystem::directory_options::skip_permission_denied, ec)) {
         if (ec) {
