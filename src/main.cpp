@@ -161,7 +161,7 @@ int runCommand(const std::string& executable,
     }
 
     handler::CommandSpec spec{"cli-command", executable, args,
-                              handler::RiskLevel::Medium};
+                              handler::classifyCommandRisk(executable, args)};
     std::cout << handler::buildCommandLine(spec) << "\n";
 
     const auto policy =
