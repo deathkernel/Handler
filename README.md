@@ -810,6 +810,18 @@ Supported commands: `handler uninstall python <package>`, `handler uninstall nod
 
 The first Phase 4 batch intentionally does not remove global tools, runtimes, or operating-system applications. Those operations require separate package-manager policy, privilege handling, cross-project impact analysis, and truthful rollback semantics.
 
+## Phase 4 — Batch 2: Uninstall Safety Hardening
+
+Batch 2 strengthens the guarded uninstall boundary:
+
+- Python package removal now requires a project-local `.venv` or `venv`; Handler will not fall back to a global Python interpreter for destructive uninstall.
+- Node.js package removal requires project-local `node_modules`.
+- Pre-uninstall impact analysis checks other declared Python dependencies for a dependency relationship to the target package and blocks removal when a declared dependent is detected.
+- Rollback status is now surfaced separately from transaction failure so Handler does not report an unverified recovery as successful.
+- Uninstall regression tests cover project-local scope enforcement and deterministic safety boundaries.
+
+The uninstall engine still does **not** remove global packages, runtimes, or operating-system applications.
+
 ## Roadmap
 
 ### Phase 0 — Specification
