@@ -84,7 +84,7 @@ std::string nodeVersion(const std::filesystem::path& root,
                     RiskLevel::Low, 30000, root};
     const auto result = executeCommand(cmd);
     if (!result.started || result.output.empty()) return {};
-    const std::string key = ""version"";
+    const std::string key = "\"version\"";
     const auto pos = result.output.find(key);
     if (pos == std::string::npos) return {};
     const auto colon = result.output.find(':', pos + key.size());
