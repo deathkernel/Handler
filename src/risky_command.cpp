@@ -29,6 +29,10 @@ CommandRiskResult inspectCommandRisk(const std::string& commandLine) {
     if (s.find("winget uninstall") != std::string::npos)
         return {CommandRisk::Blocked, "toolchain removal is outside the automatic repair boundary"};
 
+    if (s.find("pip uninstall") != std::string::npos ||
+        s.find("npm uninstall") != std::string::npos)
+        return {CommandRisk::Review, "package removal changes a project environment"};
+
     if (s.find("winget install") != std::string::npos ||
         s.find("winget upgrade") != std::string::npos)
         return {CommandRisk::Review, "package-manager operation can modify installed software"};
