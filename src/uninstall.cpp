@@ -111,6 +111,30 @@ std::string nodeVersion(const std::filesystem::path& root,
                                           : std::string{};
 }
 
+void appendDirectDependents(const std::filesystem::path& root,
+                              const std::string& ecosystem,
+                              const std::string& package,
+                              std::vector<std::string>& affected) {
+    const auto info = inspectDependencies(root, ecosystem);
+    const auto requirements = parseDependencyRequirements(info);
+    for (const auto& req : requirements) {
+        if (samePackage(req.name, package)) continue;
+        CommandSpec cmd{"uninstall-impact",
+                        ecosystem == "Python" ? pythonExecutable(root).string() : "npm",
+                        ecosystem == "Python"
+                            ? std::vector<std::string>{"-m", "pip", "show", req.name}
+                            : std::vector<std::string>{"ls", req.name, "--depth=0", "--json"},
+                        RiskLevel::Low, 30000, root};
+        const auto result = executeCommand(cmd);
+        if (!result.started || result.exitCode != 0) continue;
+        const auto normalized = normalizePackage(package);
+        std::string output = normalizePackage(result.output);
+        if (output.find("requires:") != std::string::npos &&
+            output.find(normalized) != std::string::npos)
+            affected.push_back(req.name + " (declared project dependency depends on target)");
+    }
+}
+
 bool directDependency(const std::filesystem::path& root,
                       const std::string& ecosystem,
                       const std::string& package,
@@ -204,6 +228,12 @@ UninstallPlan planUninstall(const std::filesystem::path& projectRoot,
 
     if (!directDependency(root, ecosystemName, package, plan.affected)) {
         plan.reason = "package is not a direct dependency of this project; transitive removal is blocked";
+        return plan;
+    }
+
+    appendDirectDependents(root, ecosystemName, package, plan.affected);
+    if (plan.affected.size() > 1) {
+        plan.reason = "uninstall blocked: other declared project dependencies depend on this package";
         return plan;
     }
 
