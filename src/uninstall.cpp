@@ -1,11 +1,255 @@
 #include "handler/uninstall.h"
+
+#include "handler/action_engine.h"
+#include "handler/artifact_backup.h"
+#include "handler/dependency_manager.h"
+#include "handler/transaction.h"
+#include "handler/verification.h"
+#include "handler/state_paths.h"
+
+#include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <regex>
+#include <sstream>
+
 namespace handler {
-UninstallPlan planUninstall(const std::filesystem::path& target) {
-    if (target.empty()) return {false, {}, "empty target"};
+namespace {
+
+bool validPackageName(const std::string& package) {
+    if (package.empty() || package.size() > 214) return false;
+    for (unsigned char c : package) {
+        if (!(std::isalnum(c) || c == '-' || c == '_' || c == '.' ||
+              c == '@' || c == '/')) return false;
+    }
+    return package.find('/') == std::string::npos ||
+           package.rfind('@', 0) == 0;
+}
+
+std::filesystem::path pythonExecutable(const std::filesystem::path& root) {
+    const auto venv = root / ".venv";
+    const auto alt = root / "venv";
+#ifdef _WIN32
+    for (const auto& p : {venv / "Scripts" / "python.exe",
+                          alt / "Scripts" / "python.exe"}) {
+#else
+    for (const auto& p : {venv / "bin" / "python",
+                          alt / "bin" / "python"}) {
+#endif
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(p, ec)) return p;
+    }
+#ifdef _WIN32
+    return "python.exe";
+#else
+    return "python";
+#endif
+}
+
+std::string normalizePackage(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    for (char& c : s)
+        if (c == '_') c = '-';
+    return s;
+}
+
+bool samePackage(const std::string& a, const std::string& b) {
+    return normalizePackage(a) == normalizePackage(b);
+}
+
+std::string pythonVersion(const std::filesystem::path& root,
+                          const std::string& package) {
+    CommandSpec cmd{"uninstall-version", pythonExecutable(root).string(),
+                    {"-m", "pip", "show", package, "--disable-pip-version-check"},
+                    RiskLevel::Low, 30000, root};
+    const auto result = executeCommand(cmd);
+    if (!result.started || result.exitCode != 0) return {};
+    std::istringstream lines(result.output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (line.rfind("Version:", 0) == 0)
+            return line.substr(8).empty() ? std::string{} : line.substr(8).substr(
+                line.substr(8).find_first_not_of(" \t"));
+    }
+    return {};
+}
+
+std::string nodeVersion(const std::filesystem::path& root,
+                        const std::string& package) {
+    CommandSpec cmd{"uninstall-version", "npm",
+                    {"ls", package, "--depth=0", "--json"},
+                    RiskLevel::Low, 30000, root};
+    const auto result = executeCommand(cmd);
+    if (!result.started || result.output.empty()) return {};
+    const std::string key = "\"version\"";
+    const auto pos = result.output.find(key);
+    if (pos == std::string::npos) return {};
+    const auto colon = result.output.find(':', pos + key.size());
+    const auto first = result.output.find('"', colon + 1);
+    const auto second = result.output.find('"', first + 1);
+    return (colon != std::string::npos && first != std::string::npos &&
+            second != std::string::npos) ? result.output.substr(first + 1, second - first - 1)
+                                          : std::string{};
+}
+
+bool directDependency(const std::filesystem::path& root,
+                      const std::string& ecosystem,
+                      const std::string& package,
+                      std::vector<std::string>& affected) {
+    const auto info = inspectDependencies(root, ecosystem);
+    const auto requirements = parseDependencyRequirements(info);
+    bool found = false;
+    for (const auto& req : requirements) {
+        if (samePackage(req.name, package)) {
+            found = true;
+            affected.push_back(req.name + " (direct project dependency)");
+        }
+    }
+    return found;
+}
+
+std::vector<ArtifactBackup> backupManifests(const UninstallPlan& plan,
+                                            const std::filesystem::path& root) {
+    std::vector<ArtifactBackup> backups;
+    const auto first = backupArtifact(plan.manifest, root);
+    if (first) backups.push_back(*first);
+    if (plan.ecosystem == UninstallEcosystem::NodeJs) {
+        const auto lock = plan.projectRoot / "package-lock.json";
+        if (std::filesystem::is_regular_file(lock))
+            if (const auto b = backupArtifact(lock, root))
+                backups.push_back(*b);
+    }
+    return backups;
+}
+
+bool reinstall(const UninstallPlan& plan) {
+    if (plan.installedVersion.empty()) return false;
+    if (plan.ecosystem == UninstallEcosystem::Python) {
+        CommandSpec cmd{"uninstall-rollback", pythonExecutable(plan.projectRoot).string(),
+                        {"-m", "pip", "install",
+                         plan.packageName + "==" + plan.installedVersion,
+                         "--disable-pip-version-check"},
+                        RiskLevel::High, 120000, plan.projectRoot};
+        const auto result = executeCommand(cmd);
+        return result.started && result.exitCode == 0;
+    }
+    CommandSpec cmd{"uninstall-rollback", "npm",
+                    {"install", plan.packageName + "@" + plan.installedVersion,
+                     "--save-exact"},
+                    RiskLevel::High, 120000, plan.projectRoot};
+    const auto result = executeCommand(cmd);
+    return result.started && result.exitCode == 0;
+}
+
+} // namespace
+
+UninstallPlan planUninstall(const std::filesystem::path& projectRoot,
+                            UninstallEcosystem ecosystem,
+                            const std::string& package) {
+    UninstallPlan plan;
+    plan.projectRoot = projectRoot;
+    plan.packageName = package;
+
+    if (package.empty() || !validPackageName(package)) {
+        plan.reason = "invalid package name";
+        return plan;
+    }
+
     std::error_code ec;
-    const auto p = std::filesystem::weakly_canonical(target, ec);
-    if (ec) return {false, target, "target cannot be resolved"};
-    if (p == p.root_path()) return {false, p, "root paths are never uninstallable"};
-    return {true, p, "target resolved; explicit confirmation still required"};
+    const auto root = std::filesystem::weakly_canonical(projectRoot, ec);
+    if (ec || !std::filesystem::is_directory(root, ec)) {
+        plan.reason = "project root is not a directory";
+        return plan;
+    }
+    plan.projectRoot = root;
+
+    const std::string ecosystemName =
+        ecosystem == UninstallEcosystem::Python ? "Python" : "Node.js";
+    const std::string manifestName =
+        ecosystem == UninstallEcosystem::Python ? "requirements.txt" : "package.json";
+    plan.manifest = root / manifestName;
+
+    if (!std::filesystem::is_regular_file(plan.manifest, ec)) {
+        plan.reason = "supported project manifest not found";
+        return plan;
+    }
+
+    if (!directDependency(root, ecosystemName, package, plan.affected)) {
+        plan.reason = "package is not a direct dependency of this project; transitive removal is blocked";
+        return plan;
+    }
+
+    plan.installedVersion = ecosystem == UninstallEcosystem::Python
+        ? pythonVersion(root, package) : nodeVersion(root, package);
+    if (plan.installedVersion.empty()) {
+        plan.reason = "package is declared but not currently installed in the project environment";
+        return plan;
+    }
+
+    if (ecosystem == UninstallEcosystem::Python) {
+        const auto python = pythonExecutable(root);
+        plan.command = python.string() + " -m pip uninstall -y " + package;
+    } else {
+        plan.command = "npm uninstall " + package;
+    }
+
+    plan.ecosystem = ecosystem;
+    plan.allowed = true;
+    plan.reason = "direct dependency found; exact installed version captured and rollback is available";
+    return plan;
 }
+
+UninstallResult executeUninstall(const UninstallPlan& plan) {
+    if (!plan.allowed)
+        return {false, false, plan.reason, {}};
+
+    const auto backups = backupManifests(plan, handlerTransactionRoot() / "uninstall-backups");
+    if (backups.empty())
+        return {false, false, "manifest backup failed; uninstall refused", {}};
+
+    Transaction tx(SafetyMode::Confirm);
+    const auto result = tx.runApproved(
+        RiskLevel::High,
+        [&] {
+            CommandSpec cmd{"package-uninstall",
+                            plan.ecosystem == UninstallEcosystem::Python
+                                ? pythonExecutable(plan.projectRoot).string() : "npm",
+                            plan.ecosystem == UninstallEcosystem::Python
+                                ? std::vector<std::string>{"-m", "pip", "uninstall", "-y", plan.packageName}
+                                : std::vector<std::string>{"uninstall", plan.packageName},
+                            RiskLevel::High, 120000, plan.projectRoot};
+            const auto action = executeCommand(cmd);
+            return action.started && action.exitCode == 0;
+        },
+        [&] {
+            CommandSpec verify{"package-uninstall-verify",
+                               plan.ecosystem == UninstallEcosystem::Python
+                                   ? pythonExecutable(plan.projectRoot).string() : "npm",
+                               plan.ecosystem == UninstallEcosystem::Python
+                                   ? std::vector<std::string>{"-m", "pip", "show", plan.packageName}
+                                   : std::vector<std::string>{"ls", plan.packageName, "--depth=0", "--json"},
+                               RiskLevel::Low, 30000, plan.projectRoot};
+            const auto check = executeCommand(verify);
+            const bool absent = !check.started || check.exitCode != 0 ||
+                (plan.ecosystem == UninstallEcosystem::NodeJs &&
+                 check.output.find(plan.packageName) == std::string::npos);
+            return VerificationResult{absent, "package absence verification",
+                                      absent ? "package is absent" : "package is still installed"};
+        },
+        [&] {
+            bool restored = true;
+            for (const auto& backup : backups)
+                restored = restoreArtifact(backup) && restored;
+            if (!reinstall(plan)) restored = false;
+            (void)restored;
+        });
+
+    if (!result.committed)
+        return {false, result.rolledBack, result.details, result.snapshotId};
+    return {true, false, "package uninstalled and verified; manifest changes backed up", result.snapshotId};
 }
+
+} // namespace handler
