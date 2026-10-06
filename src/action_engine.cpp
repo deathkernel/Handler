@@ -179,9 +179,13 @@ ActionResult executeCommand(const CommandSpec& command) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
         limits.BasicLimitInformation.LimitFlags =
             JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        SetInformationJobObject(job, JobObjectExtendedLimitInformation,
-                                &limits, sizeof(limits));
-        AssignProcessToJobObject(job, process.hProcess);
+        const BOOL configured = SetInformationJobObject(
+            job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+        const BOOL assigned = configured && AssignProcessToJobObject(job, process.hProcess);
+        if (!assigned) {
+            CloseHandle(job);
+            job = nullptr;
+        }
     }
 
     std::string output;
@@ -201,10 +205,9 @@ ActionResult executeCommand(const CommandSpec& command) {
         if (job) {
             CloseHandle(job);
             job = nullptr;
-        } else {
-            TerminateProcess(process.hProcess, 124);
-            WaitForSingleObject(process.hProcess, 5000);
         }
+        TerminateProcess(process.hProcess, 124);
+        WaitForSingleObject(process.hProcess, 5000);
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
         if (reader.joinable()) reader.join();
@@ -272,6 +275,7 @@ ActionResult executeCommand(const CommandSpec& command) {
     }
 
     if (child == 0) {
+        setpgid(0, 0);
         close(outputPipe[0]);
         if (!command.workingDirectory.empty())
             (void)chdir(command.workingDirectory.c_str());
@@ -315,11 +319,11 @@ ActionResult executeCommand(const CommandSpec& command) {
         }
 
         if (std::chrono::steady_clock::now() >= deadline) {
-            kill(child, SIGTERM);
+            kill(-child, SIGTERM);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             int finalStatus = 0;
             if (waitpid(child, &finalStatus, WNOHANG) == 0) {
-                kill(child, SIGKILL);
+                kill(-child, SIGKILL);
                 waitpid(child, &finalStatus, 0);
             }
             if (reader.joinable()) reader.join();
