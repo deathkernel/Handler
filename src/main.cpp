@@ -155,6 +155,9 @@ int runUninstall(const std::string& ecosystemName, const std::string& package,
                          package + " | version=" + plan.installedVersion +
                          " | snapshot=" + result.snapshotId);
     std::cout << result.details << "\n";
+    if (result.rollbackAttempted)
+        std::cout << "Rollback: "
+                  << (result.rollbackVerified ? "verified" : "NOT VERIFIED") << "\n";
     return result.success ? 0 : 1;
 }
 
