@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Handler VERSION 0.7.0 LANGUAGES CXX)
+project(Handler VERSION 0.8.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -79,6 +79,7 @@ add_executable(handler_tests
     src/history.cpp
     src/artifact_backup.cpp
     src/state_paths.cpp
+    src/system_info.cpp
     src/transaction.cpp
     src/recovery_journal.cpp
 )

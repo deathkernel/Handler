@@ -5,6 +5,14 @@
 #include <filesystem>
 #include <string>
 #include <thread>
+#include <chrono>
+#ifndef _WIN32
+#include <sys/types.h>
+#include <cerrno>
+#include <csignal>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -223,31 +231,74 @@ ActionResult executeCommand(const CommandSpec& command) {
 
 #else
 
+namespace {
+std::string shellQuote(const std::string& value) {
+    std::string out = "'";
+    for (char ch : value) {
+        if (ch == '\'') out += "'\\''";
+        else out += ch;
+    }
+    out += "'";
+    return out;
+}
+
+std::string buildShellCommand(const CommandSpec& command) {
+    std::string line = shellQuote(command.executable);
+    for (const auto& arg : command.arguments)
+        line += " " + shellQuote(arg);
+    return line;
+}
+}
+
 ActionResult executeCommand(const CommandSpec& command) {
     if (!isAllowedExecutable(command.executable))
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
-
-    std::string line = buildCommandLine(command) + " 2>&1";
 
     if (!command.workingDirectory.empty()) {
         std::error_code ec;
         if (!std::filesystem::is_directory(command.workingDirectory, ec))
             return {false, -1, {}, "working directory does not exist"};
-        line = "cd " + quoteArgument(command.workingDirectory.string()) + " && " + line;
     }
 
-    FILE* pipe = popen(line.c_str(), "r");
-    if (!pipe) return {false, -1, {}, "failed to start command"};
+    const pid_t child = fork();
+    if (child < 0) return {false, -1, {}, "failed to fork command process"};
 
-    std::string output;
-    std::array<char, 512> buffer{};
-    while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe))
-        output += buffer.data();
+    if (child == 0) {
+        if (!command.workingDirectory.empty())
+            (void)chdir(command.workingDirectory.c_str());
 
-    const int code = pclose(pipe);
-    return {true, code, output, code == 0 ? std::string{} : output};
+        const std::string line = buildShellCommand(command) + " 2>&1";
+        execl("/bin/sh", "sh", "-c", line.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+    }
+
+    const auto timeout = std::chrono::milliseconds(
+        command.timeoutMs == 0 ? 120000 : command.timeoutMs);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (true) {
+        int status = 0;
+        const pid_t result = waitpid(child, &status, WNOHANG);
+        if (result == child) {
+            const int code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+            return {true, code, {}, code == 0 ? std::string{} : "command failed"};
+        }
+        if (result < 0)
+            return {true, -1, {}, "failed to wait for command"};
+
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(child, SIGTERM);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            int finalStatus = 0;
+            if (waitpid(child, &finalStatus, WNOHANG) == 0) {
+                kill(child, SIGKILL);
+                waitpid(child, &finalStatus, 0);
+            }
+            return {true, 124, {}, "command timed out and was terminated"};
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
 }
-
 #endif
 
 } // namespace handler

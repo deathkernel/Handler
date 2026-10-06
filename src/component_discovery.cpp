@@ -21,6 +21,26 @@ std::string commandPath(const std::string& name) {
     const DWORD length = SearchPathA(nullptr, candidate.c_str(), nullptr, MAX_PATH, buffer, nullptr);
     return length ? std::string(buffer, length) : std::string{};
 #else
+    const char* rawPath = std::getenv("PATH");
+    if (!rawPath) return {};
+
+    const std::string pathValue(rawPath);
+    std::size_t begin = 0;
+    while (begin <= pathValue.size()) {
+        const auto end = pathValue.find(':', begin);
+        const auto entry = pathValue.substr(
+            begin, end == std::string::npos ? std::string::npos : end - begin);
+        if (!entry.empty()) {
+            const auto candidate = std::filesystem::path(entry) / name;
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(candidate, ec) &&
+                (ec.value() == 0)) {
+                return std::filesystem::weakly_canonical(candidate, ec).string();
+            }
+        }
+        if (end == std::string::npos) break;
+        begin = end + 1;
+    }
     return {};
 #endif
 }
@@ -30,9 +50,8 @@ std::vector<Component> discoverComponents(const std::vector<std::string>& names)
     std::vector<Component> result;
     for (const auto& name : names) {
         const auto path = commandPath(name);
-        if (!path.empty()) {
+        if (!path.empty())
             result.push_back({name, "command", path, {}, true});
-        }
     }
     return result;
 }

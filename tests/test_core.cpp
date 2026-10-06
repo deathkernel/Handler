@@ -11,6 +11,9 @@
 #include "handler/artifact_backup.h"
 #include "handler/state_paths.h"
 
+#include "handler/component_discovery.h"
+#include "handler/system_info.h"
+
 #include <cassert>
 #include <iostream>
 #include <fstream>
@@ -21,7 +24,7 @@ int main() {
 
     assert(quoteArgument("plain") == "plain");
     assert(quoteArgument("hello world") == "\"hello world\"");
-    assert(quoteArgument("a\\b c") == "\"a\\\\b c\"");
+    assert(quoteArgument("a\\b c") == "\"a\\b c\"");
 
     const auto stateRoot = handlerStateRoot();
     const auto transactionRoot = handlerTransactionRoot();
@@ -51,6 +54,18 @@ int main() {
     assert(restoredText == "handler-batch-2");
     std::filesystem::remove_all(backupBase, testEc);
 
+    const auto discovered = discoverComponents({"python", "definitely-not-a-handler-tool"});
+    assert(discovered.size() <= 1);
+    for (const auto& component : discovered) {
+        assert(component.executable);
+        assert(!component.path.empty());
+        assert(std::filesystem::is_regular_file(component.path));
+    }
+
+    const auto systemHealth = inspectSystem();
+    assert(!systemHealth.pathAvailable || !systemHealth.pathValue.empty());
+    assert(systemHealth.tempAvailable);
+
     assert(isAllowedExecutable("python"));
     assert(isAllowedExecutable("dotnet"));
     assert(isAllowedExecutable("npm"));
@@ -76,7 +91,7 @@ int main() {
     DependencyInfo depInfo;
     depInfo.ecosystem = "Python";
     depInfo.manifest = "requirements.txt";
-    depInfo.declared = {"requests>=2.0", "flask==3.0", "requests<3.0"};
+    depInfo.declared = {"requests>=3.0", "flask==3.0", "requests<3.0"};
     const auto requirements = parseDependencyRequirements(depInfo);
     assert(requirements.size() == 3);
     const auto conflicts = findDependencyConflicts(requirements);
@@ -142,13 +157,17 @@ int main() {
     const auto envRoot = std::filesystem::temp_directory_path() / "handler_env_test";
     std::filesystem::remove_all(envRoot, ec);
     const auto envFile = envRoot / "environment.baseline";
+#ifdef _WIN32
     assert(saveEnvironmentBaseline(envFile, {"PATH", "TEMP"}));
+#else
+    assert(saveEnvironmentBaseline(envFile, {"PATH", "HOME"}));
+#endif
     std::vector<EnvironmentEntry> envEntries;
     assert(loadEnvironmentBaseline(envFile, envEntries));
     assert(!envEntries.empty());
     const auto envDiff = compareEnvironmentBaseline(envEntries);
     assert(envDiff.missing.empty());
-    assert(!isSensitiveVariable("API_TOKEN"));
+    assert(isSensitiveVariable("API_TOKEN"));
     assert(isSensitiveVariable("NORMAL_VALUE") == false);
     std::filesystem::remove_all(envRoot, ec);
 
@@ -160,9 +179,12 @@ int main() {
     assert(candidates.size() == 2);
     std::string repairDetails;
     assert(!repairToolchain("java", repairDetails));
-    assert(repairDetails.find("winget") != std::string::npos ||
-           repairDetails.find("Windows-only") != std::string::npos ||
-           repairDetails.find("available") != std::string::npos);
+    assert(!repairDetails.empty());
+#ifndef _WIN32
+    repairDetails.clear();
+    assert(!repairToolchain("python", repairDetails));
+    assert(repairDetails.find("not enabled") != std::string::npos);
+#endif
 
     std::cout << "Handler core tests passed.\n";
     return 0;

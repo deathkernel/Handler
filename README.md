@@ -752,7 +752,17 @@ Batch 2 strengthens the recovery foundation without broadening Handler into an u
 
 The recovery layer still does not claim full filesystem rollback. Snapshots capture Handler environment state, while artifact backups cover only files explicitly registered by a transaction.
 
-## Project Status
+## Phase 3 — Linux & macOS Portability
+
+The portability layer now supports Unix-like environments for core observation workflows:
+
+- PATH-based developer-tool discovery on Linux/macOS.
+- XDG state storage with `$XDG_STATE_HOME`, then `$HOME/.local/state/handler`.
+- Portable hostname/user/TMPDIR detection.
+- Cross-platform CMake/CTest CI on Windows, Ubuntu, and macOS.
+
+Windows remains the strongest platform for package-manager-backed repair. Linux/macOS package installation and automatic repair remain intentionally disabled until platform-specific installer policies and rollback semantics are implemented.
+
 
 🚧 **Level 6 — Maintenance & Advanced Operations Foundation Implemented**
 

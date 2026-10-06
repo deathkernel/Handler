@@ -3,26 +3,32 @@
 #include <cstdlib>
 #include <iostream>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
 namespace handler {
 
 namespace {
-
 std::string environmentValue(const char* name) {
     const char* value = std::getenv(name);
     return value ? std::string(value) : std::string{};
 }
 
-} // namespace
+std::string firstEnvironmentValue(const char* first, const char* second) {
+    const auto value = environmentValue(first);
+    return value.empty() ? environmentValue(second) : value;
+}
+}
 
 SystemHealth inspectSystem() {
     SystemHealth health;
+#ifdef _WIN32
     health.computerName = environmentValue("COMPUTERNAME");
     health.userName = environmentValue("USERNAME");
-    health.tempPath = environmentValue("TEMP");
+    health.tempPath = firstEnvironmentValue("TEMP", "TMP");
+#else
+    health.computerName = firstEnvironmentValue("HOSTNAME", "HOST");
+    health.userName = firstEnvironmentValue("USER", "LOGNAME");
+    health.tempPath = firstEnvironmentValue("TMPDIR", "TMP");
+    if (health.tempPath.empty()) health.tempPath = "/tmp";
+#endif
     health.pathValue = environmentValue("PATH");
     health.pathAvailable = !health.pathValue.empty();
     health.tempAvailable = !health.tempPath.empty();
@@ -36,7 +42,11 @@ void printSystemHealth(const SystemHealth& health) {
     std::cout << "User         : " << (health.userName.empty() ? "<unknown>" : health.userName) << '\n';
     std::cout << "TEMP         : " << (health.tempAvailable ? health.tempPath : "<missing>") << '\n';
     std::cout << "PATH         : " << (health.pathAvailable ? "available" : "missing") << '\n';
+#ifdef _WIN32
     std::cout << "Scope        : PC / System\n";
+#else
+    std::cout << "Scope        : User / Development Environment\n";
+#endif
 }
 
 } // namespace handler
