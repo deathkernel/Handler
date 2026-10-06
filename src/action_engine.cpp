@@ -6,8 +6,8 @@
 #include <string>
 #include <thread>
 #include <chrono>
-#include <sys/types.h>
 #ifndef _WIN32
+#include <sys/types.h>
 #include <cerrno>
 #include <csignal>
 #include <sys/wait.h>
