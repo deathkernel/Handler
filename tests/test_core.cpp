@@ -13,6 +13,7 @@
 #include "handler/artifact_backup.h"
 #include "handler/state_paths.h"
 #include "handler/transaction.h"
+#include "handler/recovery_journal.h"
 
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
@@ -143,6 +144,20 @@ int main() {
         {}, invalidExecutable};
     const auto invalidExecution = executeCommand(invalidCommand);
     assert(!invalidExecution.started);
+
+    const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
+    std::filesystem::remove(journalTestFile, testEc);
+    RecoveryJournal journalTest(journalTestFile);
+    assert(journalTest.record("START", "test"));
+    assert(journalTest.hasUnfinishedTransaction());
+    assert(journalTest.record("ACTION_BEGIN", "test"));
+    assert(journalTest.hasUnfinishedTransaction());
+    assert(journalTest.record("COMMIT", "test"));
+    assert(!journalTest.hasUnfinishedTransaction());
+    assert(journalTest.record("START", "test"));
+    assert(journalTest.record("ROLLBACK", "test"));
+    assert(!journalTest.hasUnfinishedTransaction());
+    std::filesystem::remove(journalTestFile, testEc);
 
     Transaction rollbackTx(SafetyMode::Confirm);
     const auto rollbackOk = rollbackTx.runApproved(
