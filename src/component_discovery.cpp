@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <algorithm>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -14,13 +15,28 @@
 namespace handler {
 
 namespace {
+bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& root) {
+    std::error_code ec;
+    const auto c = std::filesystem::weakly_canonical(child, ec);
+    if (ec) return false;
+    ec.clear();
+    const auto r = std::filesystem::weakly_canonical(root, ec);
+    if (ec) return false;
+    auto ci = c.begin();
+    auto ri = r.begin();
+    for (; ri != r.end() && ci != c.end(); ++ri, ++ci) {
+        if (_wcsicmp(ri->wstring().c_str(), ci->wstring().c_str()) != 0) return false;
+    }
+    return ri == r.end();
+}
+
 bool trustedPath(const std::filesystem::path& path) {
 #ifdef _WIN32
     std::error_code ec;
     const auto canonical = std::filesystem::weakly_canonical(path, ec);
     if (ec) return false;
     const auto current = std::filesystem::weakly_canonical(std::filesystem::current_path(), ec);
-    if (!ec && canonical.parent_path() == current)
+    if (!ec && pathUnder(canonical, current))
         return false;
 
     const char* pf = std::getenv("ProgramFiles");
