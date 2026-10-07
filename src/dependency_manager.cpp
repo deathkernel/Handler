@@ -247,8 +247,19 @@ std::string installedDependencyVersion(const std::string& ecosystem,const std::s
             return depTrim(r.output.substr(begin,end==std::string::npos?r.output.size()-begin:end-begin));
         }
     } else {
-        const std::regex re(R"DELIM("version"\s*:\s*"([^"]+)")DELIM");
-        if(std::regex_search(r.output,m,re)) return m[1].str();
+        const std::string dependencyKey = "\"" + package + "\"";
+        const auto dependencyPos = r.output.find(dependencyKey);
+        if (dependencyPos != std::string::npos) {
+            const auto versionKey = r.output.find("\"version\"", dependencyPos + dependencyKey.size());
+            if (versionKey != std::string::npos) {
+                const auto firstQuote = r.output.find('"', r.output.find(':', versionKey) + 1);
+                if (firstQuote != std::string::npos) {
+                    const auto secondQuote = r.output.find('"', firstQuote + 1);
+                    if (secondQuote != std::string::npos)
+                        return r.output.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+                }
+            }
+        }
     }
     return {};
 }
