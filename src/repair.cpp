@@ -36,18 +36,9 @@ std::filesystem::path repairStateRoot() {
 }
 
 std::filesystem::path pythonExecutableForCurrentContext() {
-    if (const char* v = std::getenv("VIRTUAL_ENV"); v && *v) {
-        const auto root = std::filesystem::path(v);
-#ifdef _WIN32
-        const auto candidate = root / "Scripts" / "python.exe";
-#else
-        const auto candidate = root / "bin" / "python";
-#endif
-        std::error_code ec;
-        if (std::filesystem::is_regular_file(candidate, ec))
-            return candidate;
-    }
-
+    // Do not trust VIRTUAL_ENV directly: it is caller-controlled environment
+    // state and may point Handler at an arbitrary interpreter. Repair is
+    // intentionally restricted to a project-local .venv/venv.
     const auto project = detectProjectContext(std::filesystem::current_path());
     if (!project.root.empty() && project.type == "Python") {
         for (const auto& name : {".venv", "venv"}) {
