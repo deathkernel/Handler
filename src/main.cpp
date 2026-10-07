@@ -31,6 +31,7 @@
 #include "handler/temp_cleaner.h"
 #include "handler/repair.h"
 #include "handler/auto_recovery.h"
+#include "handler/state_paths.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -41,14 +42,10 @@
 #include <vector>
 
 namespace {
-constexpr const char* kVersion = "0.8.0";
+constexpr const char* kVersion = "0.9.0";
 
 std::filesystem::path stateRoot() {
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        return std::filesystem::path(p) / "Handler";
-    if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        return std::filesystem::path(p) / ".handler";
-    return std::filesystem::current_path() / ".handler";
+    return handler::handlerStateRoot();
 }
 
 handler::History makeHistory() {
