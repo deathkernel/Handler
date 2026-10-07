@@ -4,6 +4,7 @@
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <string>
 
 namespace handler {
 
@@ -31,3 +32,25 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
 }
 
 } // namespace handler
+
+bool handler::RecoveryJournal::hasUnfinishedTransaction() const {
+    std::ifstream in(file_);
+    if (!in) return false;
+
+    std::string line;
+    bool active = false;
+    while (std::getline(in, line)) {
+        const auto delimiter = line.find(" | ");
+        if (delimiter == std::string::npos) continue;
+        const auto stageStart = delimiter + 3;
+        const auto stageEnd = line.find(" | ", stageStart);
+        if (stageEnd == std::string::npos) continue;
+        const auto stage = line.substr(stageStart, stageEnd - stageStart);
+        if (stage == "START" || stage == "SNAPSHOT")
+            active = true;
+        else if (stage == "COMMIT" || stage == "ROLLBACK" ||
+                 stage == "ABORT" || stage == "RECOVERY_REQUIRED")
+            active = false;
+    }
+    return active;
+}
