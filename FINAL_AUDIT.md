@@ -39,6 +39,7 @@ Audit scope:
 - Transaction artifacts now carry a content fingerprint; restore rejects same-size backup tampering and verifies the restored file fingerprint before reporting success.
 - Recovery journals now fail closed at transaction boundaries, track active action/verification stages, detect interrupted transactions, and block subsequent high-risk mutations until the interrupted state is reviewed.
 - Transactions now acquire an OS-backed exclusive lock under Handler transaction state, preventing concurrent Handler processes from mutating the same environment and journal simultaneously; the OS releases the lock if the process exits unexpectedly.
+- Manual snapshot rollback now acquires the same transaction lock and records a terminal MANUAL_ROLLBACK stage; if journal persistence fails, the command fails closed instead of silently claiming recovery is complete.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Second-pass audit status
@@ -56,6 +57,7 @@ The second pass found and fixed three additional Windows execution-boundary issu
 9. Cross-platform compiler warnings uncovered during CI were cleaned up, including ambiguous boolean precedence, unused security helpers, and platform-specific toolchain helpers.
 10. Regression coverage now explicitly rejects malformed dependency package names before any registry or install command is reached.
 11. Transaction concurrency is covered by an in-process lock contention regression test.
+12. Manual rollback completion is covered by recovery-journal regression coverage.
 
 The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation. Transaction concurrency is now serialized with a cross-platform OS-backed lock in the Handler transaction state directory. The executable trust policy is also centralized so future trust-boundary changes cannot silently diverge between execution and discovery paths.
 
