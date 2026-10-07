@@ -138,6 +138,8 @@ int runUninstall(const std::string& ecosystemName, const std::string& package,
         return 0;
     }
 
+    if (mutationBlockedByInterruptedTransaction()) return 1;
+
     std::cout << "This will remove the package from the current project environment. "
                  "Handler will back up the manifest/lockfile and retain a recovery snapshot. [y/N]: ";
     std::string answer;
