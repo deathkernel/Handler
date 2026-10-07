@@ -103,6 +103,14 @@ int main() {
     const auto installRisk = classifyCommandRisk("npm", {"install", "express"});
     assert(installRisk == RiskLevel::High);
 
+    const auto invalidDependencyRoot =
+        std::filesystem::temp_directory_path() / "handler-invalid-dependency-test";
+    std::filesystem::remove_all(invalidDependencyRoot, ec);
+    std::filesystem::create_directories(invalidDependencyRoot, ec);
+    assert(upgradeDependency(invalidDependencyRoot, "Python", "bad;package", ">=1.0") == 3);
+    assert(upgradeDependency(invalidDependencyRoot, "Node.js", "bad;package", ">=1.0") == 3);
+    assert(upgradeDependency(invalidDependencyRoot, "Unknown", "package", ">=1.0") == 3);
+    std::filesystem::remove_all(invalidDependencyRoot, ec);
 
     const auto errors = detectErrors("ModuleNotFoundError: No module named 'requests'");
     assert(!errors.empty());
