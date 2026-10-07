@@ -161,6 +161,32 @@ int main() {
     }
     std::filesystem::remove(lockTestFile, testEc);
 
+    const auto transactionA = RecoveryJournal::newTransactionId();
+    const auto transactionB = RecoveryJournal::newTransactionId();
+    assert(transactionA != transactionB);
+    const auto journalIdentityFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-identity-test.log";
+    std::filesystem::remove(journalIdentityFile, testEc);
+    RecoveryJournal identityJournal(journalIdentityFile);
+    assert(identityJournal.record(transactionA, "START", "A"));
+    assert(identityJournal.record(transactionB, "START", "B"));
+    assert(identityJournal.record(transactionA, "COMMIT", "A"));
+    assert(identityJournal.hasUnfinishedTransaction());
+    const auto activeAfterA = identityJournal.unfinishedTransactionIds();
+    assert(activeAfterA.size() == 1 && activeAfterA.front() == transactionB);
+    assert(identityJournal.record(transactionB, "MANUAL_ROLLBACK", "B"));
+    assert(!identityJournal.hasUnfinishedTransaction());
+
+    {
+        std::ofstream legacy(journalIdentityFile, std::ios::app);
+        legacy << "2026-10-07T00:00:00Z | START | legacy\n";
+    }
+    assert(identityJournal.hasUnfinishedTransaction());
+    assert(identityJournal.unfinishedTransactionIds().size() == 1);
+    assert(identityJournal.unfinishedTransactionIds().front().empty());
+    assert(identityJournal.record("ROLLBACK", "legacy"));
+    assert(!identityJournal.hasUnfinishedTransaction());
+    std::filesystem::remove(journalIdentityFile, testEc);
+
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
     std::filesystem::remove(journalTestFile, testEc);
     RecoveryJournal journalTest(journalTestFile);
