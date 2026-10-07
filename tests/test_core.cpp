@@ -181,6 +181,7 @@ int main() {
     assert(!isHandlerStatePath(outsideBaseline));
     assert(!loadPathBaseline(outsideBaseline, loaded));
 
+    const auto outsideEnvBaseline = std::filesystem::temp_directory_path() / "handler-untrusted.environment.baseline";
     std::vector<EnvironmentEntry> envEntries;
     assert(!loadEnvironmentBaseline(outsideEnvBaseline, envEntries));
 
