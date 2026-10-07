@@ -357,16 +357,35 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            if (!restored || ecosystem != "Node.js") return restored;
+            if (!restored) return false;
 
-            const std::filesystem::path lockfile = projectRoot / "package-lock.json";
-            const bool hasLockfile = std::filesystem::is_regular_file(lockfile);
-            CommandSpec rollback{"dependency-upgrade-rollback", "npm",
-                hasLockfile
-                    ? std::vector<std::string>{"ci", "--ignore-scripts", "--no-audit", "--no-fund"}
-                    : std::vector<std::string>{"install", "--ignore-scripts", "--no-audit", "--no-fund"},
-                RiskLevel::High, 180000};
-            rollback.workingDirectory = projectRoot;
+            if (ecosystem == "Node.js") {
+                const std::filesystem::path lockfile = projectRoot / "package-lock.json";
+                const bool hasLockfile = std::filesystem::is_regular_file(lockfile);
+                CommandSpec rollback{"dependency-upgrade-rollback", "npm",
+                    hasLockfile
+                        ? std::vector<std::string>{"ci", "--ignore-scripts", "--no-audit", "--no-fund"}
+                        : std::vector<std::string>{"install", "--ignore-scripts", "--no-audit", "--no-fund"},
+                    RiskLevel::High, 180000};
+                rollback.workingDirectory = projectRoot;
+                const auto r = executeCommand(rollback);
+                return r.started && r.exitCode == 0;
+            }
+
+            if (current.empty()) {
+                CommandSpec rollback{"dependency-upgrade-rollback", "python",
+                    {"-m", "pip", "uninstall", "-y", package, "--disable-pip-version-check"},
+                    RiskLevel::High, 120000};
+                rollback.executablePath = pythonProjectExecutable(projectRoot);
+                const auto r = executeCommand(rollback);
+                return r.started && r.exitCode == 0;
+            }
+
+            CommandSpec rollback{"dependency-upgrade-rollback", "python",
+                {"-m", "pip", "install", package + "==" + current,
+                 "--disable-pip-version-check"},
+                RiskLevel::High, 120000};
+            rollback.executablePath = pythonProjectExecutable(projectRoot);
             const auto r = executeCommand(rollback);
             return r.started && r.exitCode == 0;
         });
