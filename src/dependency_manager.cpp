@@ -345,7 +345,7 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
     const auto result=tx.runApproved(RiskLevel::High,
         [&] {
             CommandSpec cmd{"dependency-upgrade",ecosystem=="Python"?"python":"npm",{},RiskLevel::High,180000};
-            if(ecosystem=="Python") { cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check"}; cmd.executablePath=pythonProjectExecutable(projectRoot); }
+            if(ecosystem=="Python") { cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check","--only-binary=:all:"}; cmd.executablePath=pythonProjectExecutable(projectRoot); }
             else { cmd.arguments={"install",package+"@"+*selected,"--no-audit","--no-fund","--ignore-scripts"}; cmd.workingDirectory=projectRoot; }
             const auto r=executeCommand(cmd); std::cout<<r.output; return r.started&&r.exitCode==0;
         },
