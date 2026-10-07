@@ -85,3 +85,11 @@ The repository is release-oriented within its documented scope, but the limitati
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
 
 - Dependency compatibility checks now use constraint-derived boundary candidates instead of a fixed 0–20 version search range; high-version regression coverage was added.
+## Latest package-removal transaction hardening
+
+- Destructive package removal remains behind the interrupted-transaction mutation gate; dry-run inspection remains available.
+- Manifest and lockfile backups are now created inside the shared transaction boundary, after the transaction lock and recovery snapshot are established.
+- Required Node.js lockfile backups now fail closed instead of being silently skipped.
+- Package rollback avoids npm lifecycle scripts and restricts Python rollback to binary wheels.
+- Node version discovery now targets the requested dependency entry rather than the root project's first version field.
+- If backup creation fails before the package-manager action is attempted, rollback does not reinstall or otherwise mutate the project.
