@@ -3,6 +3,7 @@
 #include "handler/environment_state.h"
 #include "handler/state_paths.h"
 #include "handler/recovery_journal.h"
+#include "handler/transaction_lock.h"
 #include <cstdlib>
 
 #include <filesystem>
@@ -21,6 +22,10 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
         return {false, false, false, {}, "invalid transaction callbacks"};
 
     const auto root = handlerTransactionRoot();
+    TransactionLock transactionLock(root / "transaction.lock");
+    if (!transactionLock.acquire())
+        return {false, false, false, {}, "transaction blocked: another Handler transaction is already active"};
+
     RecoveryJournal journal(root / "recovery.log");
     if (!journal.record("START", "transaction started"))
         return {false, false, false, {}, "transaction aborted: recovery journal unavailable"};
