@@ -75,6 +75,25 @@ int main() {
     assert(isAllowedExecutable("winget"));
     assert(classifyCommandRisk("winget", {"upgrade", "--id", "Git.Git"}) == RiskLevel::High);
 
+#ifdef _WIN32
+    const auto executableGuardRoot =
+        std::filesystem::temp_directory_path() / "handler_executable_guard_test";
+    std::filesystem::remove_all(executableGuardRoot);
+    std::filesystem::create_directories(executableGuardRoot);
+    const auto fakeExecutable = executableGuardRoot / "not-git.exe";
+    {
+        std::ofstream fake(fakeExecutable);
+        fake << "not an executable";
+    }
+    CommandSpec guardedCommand;
+    guardedCommand.executable = "git";
+    guardedCommand.executablePath = fakeExecutable;
+    const auto guardedResult = executeCommand(guardedCommand);
+    assert(!guardedResult.started);
+    assert(guardedResult.error.find("does not match") != std::string::npos);
+    std::filesystem::remove_all(executableGuardRoot);
+#endif
+
     Transaction rollbackTx(SafetyMode::Confirm);
     const auto rollbackOk = rollbackTx.runApproved(
         RiskLevel::Low,
