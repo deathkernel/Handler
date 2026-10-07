@@ -1,4 +1,4 @@
-# Handler Final Audit — 0.8.0
+# Handler Final Audit — 0.9.0 security hardening
 
 Audit scope:
 1. Bugs
@@ -26,6 +26,15 @@ Audit scope:
 - TEMP cleanup refuses a filesystem-root target.
 - Command execution timeout containment was hardened for Windows job-assignment failure and Unix process groups.
 - README stale Level 6/uninstall roadmap claims were cleaned up.
+
+## 0.9.0 security hardening completed
+
+- Windows command execution now rejects resolved executables outside trusted installation roots.
+- Explicit Windows executable paths are canonicalized and must belong to a trusted installation root, the detected project working directory, or Handler-owned state.
+- Tool discovery applies the same Windows trust-root rule, preventing a project-local executable from masquerading as a discovered runtime.
+- PATH and environment baselines are accepted only from Handler-owned persistent state.
+- Transaction artifact filenames now include a deterministic source-path digest, preventing same-named artifacts from different projects from overwriting one another.
+- Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Remaining bounded limitations
 
