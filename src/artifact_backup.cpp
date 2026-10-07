@@ -1,6 +1,9 @@
 #include "handler/artifact_backup.h"
 
 #include <fstream>
+#include <functional>
+#include <iomanip>
+#include <sstream>
 
 namespace handler {
 
@@ -15,7 +18,12 @@ std::optional<ArtifactBackup> backupArtifact(
     if (ec) return std::nullopt;
 
     const auto name = source.filename().string();
-    const auto backup = backupRoot / name;
+    const auto canonicalSource = std::filesystem::weakly_canonical(source, ec);
+    if (ec) return std::nullopt;
+    const auto digest = std::hash<std::string>{}(canonicalSource.string());
+    std::ostringstream suffix;
+    suffix << std::hex << digest;
+    const auto backup = backupRoot / (name + "." + suffix.str() + ".bak");
     if (exists) {
         std::filesystem::copy_file(
             source, backup, std::filesystem::copy_options::overwrite_existing, ec);
