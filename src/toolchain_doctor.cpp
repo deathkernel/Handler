@@ -139,6 +139,13 @@ bool repairToolchain(const std::string& tool, std::string& details) {
         return false;
 
     const std::string packageId = target->packageId;
+    const std::string previousVersion =
+        finding.front().version;
+    if (previousVersion.empty() || previousVersion == "version unavailable") {
+        details = "toolchain rollback is unsafe because the installed version could not be captured";
+        return false;
+    }
+
     Transaction tx(SafetyMode::Confirm);
     const auto result = tx.runApproved(
         RiskLevel::High,
@@ -164,8 +171,29 @@ bool repairToolchain(const std::string& tool, std::string& details) {
                                       ok ? it->version : "post-repair health check failed"};
         },
         [&] {
-            details += " | rollback: package downgrade is not attempted; recovery snapshot retained";
-            return false;
+            CommandSpec rollback{
+                "toolchain-rollback",
+                "winget",
+                {"install", "--id", packageId, "--exact", "--source", "winget",
+                 "--version", previousVersion, "--force",
+                 "--accept-source-agreements", "--accept-package-agreements", "--silent"},
+                RiskLevel::High,
+                600000
+            };
+            const auto r = executeCommand(rollback);
+            if (!r.started || r.exitCode != 0) {
+                details += " | rollback failed: exact previous version " + previousVersion +
+                           " could not be restored";
+                return false;
+            }
+            const auto restored = inspectToolchain({tool});
+            const auto it = restored.empty() ? restored.end() : restored.begin();
+            const bool ok = it != restored.end() && it->available &&
+                            it->status == "HEALTHY" && it->version == previousVersion;
+            details += ok
+                ? " | rollback restored exact previous version " + previousVersion
+                : " | rollback command succeeded but exact previous version verification failed";
+            return ok;
         });
     if (!result.committed) {
         details += " | transaction=" + result.details +
