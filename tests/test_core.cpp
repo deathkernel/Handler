@@ -181,13 +181,15 @@ int main() {
     assert(!isHandlerStatePath(outsideBaseline));
     assert(!loadPathBaseline(outsideBaseline, loaded));
 
+    std::vector<EnvironmentEntry> envEntries;
+    assert(!loadEnvironmentBaseline(outsideEnvBaseline, envEntries));
+
     const auto envFile = testStateRoot / "environment.baseline";
 #ifdef _WIN32
     assert(saveEnvironmentBaseline(envFile, {"PATH", "TEMP"}));
 #else
     assert(saveEnvironmentBaseline(envFile, {"PATH", "HOME"}));
 #endif
-    std::vector<EnvironmentEntry> envEntries;
     assert(loadEnvironmentBaseline(envFile, envEntries));
     assert(!envEntries.empty());
     const auto envDiff = compareEnvironmentBaseline(envEntries);
