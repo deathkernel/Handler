@@ -43,6 +43,7 @@ Audit scope:
 - Recovery journal entries now carry a transaction ID; active/terminal state is tracked per transaction, preventing an older transaction's terminal entry from clearing a newer transaction's interrupted state. Legacy three-field journal entries remain readable.
 - Destructive TEMP cleanup now uses the shared transaction lock and recovery journal; dry-runs remain side-effect free, while partial cleanup is marked RECOVERY_REQUIRED and blocks subsequent mutations until review.
 - RECOVERY_REQUIRED is now an active recovery state rather than a terminal state, so partial/uncertain mutations cannot silently reopen the mutation surface.
+- Recovery journal parsing now fails closed on malformed non-empty entries; journal corruption is treated as an interrupted/recovery-required state rather than silently ignored.
 - Manual rollback now closes the uniquely active transaction by ID and refuses to guess if the journal contains multiple active transaction identities.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
