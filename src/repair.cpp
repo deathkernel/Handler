@@ -72,6 +72,28 @@ std::filesystem::path nodeWorkingDirectory() {
     return {};
 }
 
+std::string installedPythonPackageVersion(const std::filesystem::path& pythonPath,
+                                          const std::string& package) {
+    CommandSpec query{"python-repair-precheck", "python",
+                      {"-m", "pip", "show", package, "--disable-pip-version-check"},
+                      RiskLevel::Low, 30000};
+    query.executablePath = pythonPath;
+    const auto result = executeCommand(query);
+    if (!result.started || result.exitCode != 0) return {};
+
+    const std::string marker = "Version:";
+    const auto pos = result.output.find(marker);
+    if (pos == std::string::npos) return {};
+    const auto begin = pos + marker.size();
+    const auto end = result.output.find_first_of("\r\n", begin);
+    std::string version = result.output.substr(
+        begin, end == std::string::npos ? std::string::npos : end - begin);
+    const auto first = version.find_first_not_of(" \t");
+    const auto last = version.find_last_not_of(" \t");
+    if (first == std::string::npos) return {};
+    return version.substr(first, last - first + 1);
+}
+
 } // namespace
 
 int repairPythonModule(const char* rawPackage) {
@@ -90,11 +112,7 @@ int repairPythonModule(const char* rawPackage) {
     std::cout << "Python repair requested for: " << package << "\n"
               << "Target interpreter: " << target << "\n";
 
-    CommandSpec precheck{"python-repair-precheck", "python",
-                         {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
-    precheck.executablePath = pythonPath;
-    const auto before = executeCommand(precheck);
-    const bool wasInstalled = before.started && before.exitCode == 0;
+    const std::string previousVersion = installedPythonPackageVersion(pythonPath, package);
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
@@ -144,13 +162,23 @@ int repairPythonModule(const char* rawPackage) {
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            if (wasInstalled) return restored;
+            if (!restored) return false;
+
+            if (previousVersion.empty()) {
+                CommandSpec rollback{"python-repair-rollback", "python",
+                    {"-m", "pip", "uninstall", "-y", package,
+                     "--disable-pip-version-check"}, RiskLevel::High, 120000};
+                rollback.executablePath = pythonPath;
+                const auto result = executeCommand(rollback);
+                return result.started && result.exitCode == 0;
+            }
+
             CommandSpec rollback{"python-repair-rollback", "python",
-                {"-m", "pip", "uninstall", "-y", package,
+                {"-m", "pip", "install", package + "==" + previousVersion,
                  "--disable-pip-version-check"}, RiskLevel::High, 120000};
             rollback.executablePath = pythonPath;
             const auto result = executeCommand(rollback);
-            return restored && result.started && result.exitCode == 0;
+            return result.started && result.exitCode == 0;
         });
 
     History history(repairStateRoot() / "history.log");
