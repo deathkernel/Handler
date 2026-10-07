@@ -66,6 +66,33 @@ int main() {
         assert(std::filesystem::is_regular_file(component.path));
     }
 
+    const discoveryRoot = std::filesystem::temp_directory_path() / "handler-discovery-boundary";
+    std::filesystem::remove_all(discoveryRoot, testEc);
+    std::filesystem::create_directories(discoveryRoot, testEc);
+    assert(!testEc);
+    const auto fakeTool = discoveryRoot / "handler-fake-tool";
+    {
+        std::ofstream out(fakeTool);
+        out << "not an executable";
+    }
+#ifdef _WIN32
+    const char* oldPathRaw = std::getenv("PATH");
+    const std::string oldPath = oldPathRaw ? oldPathRaw : "";
+    _putenv_s("PATH", discoveryRoot.string().c_str());
+#else
+    const char* oldPathRaw = std::getenv("PATH");
+    const std::string oldPath = oldPathRaw ? oldPathRaw : "";
+    setenv("PATH", discoveryRoot.string().c_str(), 1);
+#endif
+    const auto untrustedDiscovery = discoverComponents({"handler-fake-tool"});
+#ifdef _WIN32
+    _putenv_s("PATH", oldPath.c_str());
+#else
+    setenv("PATH", oldPath.c_str(), 1);
+#endif
+    assert(untrustedDiscovery.empty());
+    std::filesystem::remove_all(discoveryRoot, testEc);
+
     const auto systemHealth = inspectSystem();
     assert(!systemHealth.pathAvailable || !systemHealth.pathValue.empty());
     assert(systemHealth.tempAvailable);
