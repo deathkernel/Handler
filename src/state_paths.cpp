@@ -24,4 +24,29 @@ std::filesystem::path handlerTransactionRoot() {
     return handlerStateRoot() / "transactions";
 }
 
+bool isHandlerStatePath(const std::filesystem::path& file) {
+    std::error_code ec;
+    const auto root = std::filesystem::weakly_canonical(handlerStateRoot(), ec);
+    if (ec || root.empty()) return false;
+    ec.clear();
+    const auto candidate = std::filesystem::weakly_canonical(file, ec);
+    if (ec || candidate.empty()) return false;
+
+    auto rootIt = root.begin();
+    auto candidateIt = candidate.begin();
+    for (; rootIt != root.end() && candidateIt != candidate.end(); ++rootIt, ++candidateIt) {
+#ifdef _WIN32
+        std::wstring a = rootIt->wstring();
+        std::wstring b = candidateIt->wstring();
+        if (a.size() != b.size()) return false;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            if (std::towlower(a[i]) != std::towlower(b[i])) return false;
+        }
+#else
+        if (*rootIt != *candidateIt) return false;
+#endif
+    }
+    return rootIt == root.end();
+}
+
 } // namespace handler
