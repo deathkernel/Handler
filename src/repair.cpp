@@ -184,12 +184,6 @@ int repairNodeModule(const char* rawPackage) {
     std::cout << "Node repair requested for: " << package << "\n"
               << "Target project: " << projectRoot << "\n";
 
-    CommandSpec precheck{"node-repair-precheck", "npm",
-                         {"ls", package, "--depth=0"}, RiskLevel::Low, 30000};
-    precheck.workingDirectory = projectRoot;
-    const auto before = executeCommand(precheck);
-    const bool wasInstalled = before.started && before.exitCode == 0;
-
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
         std::cout << policy.reason << " [y/N]: ";
