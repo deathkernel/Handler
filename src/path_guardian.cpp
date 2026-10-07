@@ -1,4 +1,5 @@
 #include "handler/path_guardian.h"
+#include "handler/state_paths.h"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -35,6 +36,9 @@ std::string join(const std::vector<std::string>& entries) {
     }
     return result;
 }
+bool trustedBaseline(const std::filesystem::path& file) {
+    return isHandlerStatePath(file);
+}
 }
 std::vector<PathFinding> inspectPathEntries() {
     std::vector<PathFinding> out;
@@ -59,6 +63,7 @@ PathRepairPlan analyzePathEntries() {
     return plan;
 }
 bool savePathBaseline(const std::filesystem::path& file) {
+    if (!trustedBaseline(file)) return false;
     std::error_code ec;
     std::filesystem::create_directories(file.parent_path(), ec);
     if (ec) return false;
@@ -68,6 +73,7 @@ bool savePathBaseline(const std::filesystem::path& file) {
     return out.good();
 }
 bool loadPathBaseline(const std::filesystem::path& file, std::vector<std::string>& entries) {
+    if (!trustedBaseline(file)) return false;
     std::ifstream in(file);
     if (!in) return false;
     entries.clear();
@@ -77,6 +83,10 @@ bool loadPathBaseline(const std::filesystem::path& file, std::vector<std::string
     return true;
 }
 bool restorePathFromBaseline(const std::filesystem::path& file, std::string& details) {
+    if (!trustedBaseline(file)) {
+        details = "PATH baseline is outside Handler-owned state; refusing to trust it";
+        return false;
+    }
     std::vector<std::string> baseline;
     if (!loadPathBaseline(file, baseline)) {
         details = "PATH baseline could not be loaded";
