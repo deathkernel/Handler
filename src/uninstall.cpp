@@ -100,14 +100,27 @@ std::string nodeVersion(const std::filesystem::path& root,
                     RiskLevel::Low, 30000, root};
     const auto result = executeCommand(cmd);
     if (!result.started || result.output.empty()) return {};
-    const std::string key = "\"version\"";
-    const auto pos = result.output.find(key);
-    if (pos == std::string::npos) return {};
-    const auto colon = result.output.find(':', pos + key.size());
-    const auto first = result.output.find('"', colon + 1);
-    const auto second = result.output.find('"', first + 1);
+
+    // npm ls JSON contains the root project's version before the requested
+    // dependency. Scope the search to the exact dependency entry.
+    const std::string dependenciesKey = "\"dependencies\"";
+    const auto dependenciesPos = result.output.find(dependenciesKey);
+    if (dependenciesPos == std::string::npos) return {};
+    const std::string packageKey = "\"" + package + "\"";
+    const auto packagePos = result.output.find(packageKey, dependenciesPos + dependenciesKey.size());
+    if (packagePos == std::string::npos) return {};
+    const auto objectStart = result.output.find('{', packagePos + packageKey.size());
+    const auto objectEnd = result.output.find('}', objectStart + 1);
+    if (objectStart == std::string::npos || objectEnd == std::string::npos) return {};
+    const std::string entry = result.output.substr(objectStart, objectEnd - objectStart + 1);
+    const std::string versionKey = "\"version\"";
+    const auto versionPos = entry.find(versionKey);
+    if (versionPos == std::string::npos) return {};
+    const auto colon = entry.find(':', versionPos + versionKey.size());
+    const auto first = entry.find('"', colon + 1);
+    const auto second = entry.find('"', first + 1);
     return (colon != std::string::npos && first != std::string::npos &&
-            second != std::string::npos) ? result.output.substr(first + 1, second - first - 1)
+            second != std::string::npos) ? entry.substr(first + 1, second - first - 1)
                                           : std::string{};
 }
 
@@ -151,18 +164,23 @@ bool directDependency(const std::filesystem::path& root,
     return found;
 }
 
-std::vector<ArtifactBackup> backupManifests(const UninstallPlan& plan,
-                                            const std::filesystem::path& root) {
-    std::vector<ArtifactBackup> backups;
+bool backupManifests(const UninstallPlan& plan,
+                     const std::filesystem::path& root,
+                     std::vector<ArtifactBackup>& backups) {
+    backups.clear();
     const auto first = backupArtifact(plan.manifest, root);
-    if (first) backups.push_back(*first);
+    if (!first) return false;
+    backups.push_back(*first);
+
     if (plan.ecosystem == UninstallEcosystem::NodeJs) {
         const auto lock = plan.projectRoot / "package-lock.json";
-        if (std::filesystem::is_regular_file(lock))
-            if (const auto b = backupArtifact(lock, root))
-                backups.push_back(*b);
+        if (std::filesystem::is_regular_file(lock)) {
+            const auto b = backupArtifact(lock, root);
+            if (!b) return false;
+            backups.push_back(*b);
+        }
     }
-    return backups;
+    return true;
 }
 
 bool installedAtVersion(const UninstallPlan& plan) {
@@ -179,14 +197,15 @@ bool reinstall(const UninstallPlan& plan) {
         CommandSpec cmd{"uninstall-rollback", pythonExecutable(plan.projectRoot).string(),
                         {"-m", "pip", "install",
                          plan.packageName + "==" + plan.installedVersion,
-                         "--disable-pip-version-check"},
+                         "--disable-pip-version-check",
+                         "--only-binary=:all:"},
                         RiskLevel::High, 120000, plan.projectRoot};
         const auto result = executeCommand(cmd);
         return result.started && result.exitCode == 0;
     }
     CommandSpec cmd{"uninstall-rollback", "npm",
                     {"install", plan.packageName + "@" + plan.installedVersion,
-                     "--save-exact"},
+                     "--save-exact", "--no-audit", "--no-fund", "--ignore-scripts"},
                     RiskLevel::High, 120000, plan.projectRoot};
     const auto result = executeCommand(cmd);
     return result.started && result.exitCode == 0;
@@ -269,14 +288,17 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
     if (!plan.allowed)
         return {false, false, plan.reason, {}};
 
-    const auto backups = backupManifests(plan, handlerTransactionRoot() / "uninstall-backups");
-    if (backups.empty())
-        return {false, false, "manifest backup failed; uninstall refused", {}};
+    std::vector<ArtifactBackup> backups;
+    bool uninstallAttempted = false;
 
     Transaction tx(SafetyMode::Confirm);
     const auto result = tx.runApproved(
         RiskLevel::High,
         [&] {
+            if (!backupManifests(plan, handlerTransactionRoot() / "uninstall-backups", backups))
+                return false;
+
+            uninstallAttempted = true;
             CommandSpec cmd{"package-uninstall",
                             plan.ecosystem == UninstallEcosystem::Python
                                 ? pythonExecutable(plan.projectRoot).string() : "npm",
@@ -303,6 +325,8 @@ UninstallResult executeUninstall(const UninstallPlan& plan) {
                                       absent ? "package is absent" : "package is still installed"};
         },
         [&] {
+            if (!uninstallAttempted) return true;
+
             bool restored = true;
             for (const auto& backup : backups)
                 restored = restoreArtifact(backup) && restored;
