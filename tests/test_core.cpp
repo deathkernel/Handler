@@ -49,6 +49,7 @@ int main() {
     const auto backup = backupArtifact(original, backupBase / "backups");
     assert(backup.has_value());
     assert(backup->existed && backup->originalSize == backup->backupSize);
+    assert(backup->contentHash != 0);
     {
         std::ofstream out(original, std::ios::trunc);
         out << "corrupted";
@@ -58,6 +59,13 @@ int main() {
     std::string restoredText;
     std::getline(restored, restoredText);
     assert(restoredText == "handler-batch-2");
+
+    {
+        std::ofstream out(backup->backup, std::ios::binary | std::ios::trunc);
+        out << "handler-batch-!";
+    }
+    assert(!restoreArtifact(*backup));
+
     std::filesystem::remove_all(backupBase, testEc);
 
     const auto blockedBackupRoot = backupBase / "backup-root-file";
