@@ -98,3 +98,10 @@ The repository is release-oriented within its documented scope, but the limitati
 - Recovery snapshot loading now rejects malformed records instead of silently ignoring unknown or duplicate fields.
 - All required snapshot fields must be present before a snapshot can be applied; an empty current-directory field is rejected.
 - Added regression coverage proving an injected unknown snapshot field is rejected.
+
+
+## Latest recovery journal stage hardening
+
+- Recovery journal writers now reject unknown stage names instead of persisting records that the recovery state machine cannot interpret.
+- Recovery journal parsing now treats unknown-but-well-formed stages as corruption and fails closed.
+- Added regression coverage for both rejected unknown-stage writes and injected unknown-stage records.
