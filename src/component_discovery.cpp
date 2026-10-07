@@ -60,7 +60,7 @@ std::string commandPath(const std::string& name) {
     char buffer[MAX_PATH]{};
     const DWORD length = SearchPathA(nullptr, candidate.c_str(), nullptr, MAX_PATH, buffer, nullptr);
     if (!length) return {};
-    return trustedPath(std::filesystem::path(buffer, length)) ? std::string(buffer, length) : std::string{};
+    return trustedPath(std::filesystem::path(std::string(buffer, length))) ? std::string(buffer, length) : std::string{};
 #else
     const char* rawPath = std::getenv("PATH");
     if (!rawPath) return {};
