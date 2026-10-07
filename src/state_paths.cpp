@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <cwctype>
 
 namespace handler {
 
