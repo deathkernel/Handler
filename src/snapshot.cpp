@@ -63,21 +63,41 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
     if (!in) return std::nullopt;
 
     EnvironmentState state;
+    bool timestampSeen = false;
+    bool computerSeen = false;
+    bool userSeen = false;
+    bool tempSeen = false;
+    bool pathSeen = false;
+    bool directorySeen = false;
+    bool versionSeen = false;
     std::string line;
     while (std::getline(in, line)) {
         const auto pos = line.find('=');
-        if (pos == std::string::npos) continue;
+        if (pos == std::string::npos) return std::nullopt;
         const auto key = line.substr(0, pos);
         const auto value = line.substr(pos + 1);
 
-        if (key == "timestamp_utc") state.timestampUtc = value;
-        else if (key == "computer_name") state.computerName = value;
-        else if (key == "user_name") state.userName = value;
-        else if (key == "temp_path") state.tempPath = value;
-        else if (key == "path") state.pathValue = value;
-        else if (key == "current_directory") state.currentDirectory = value;
-        else if (key == "handler_version") state.handlerVersion = value;
+        if (key == "timestamp_utc" && !timestampSeen) {
+            state.timestampUtc = value; timestampSeen = true;
+        } else if (key == "computer_name" && !computerSeen) {
+            state.computerName = value; computerSeen = true;
+        } else if (key == "user_name" && !userSeen) {
+            state.userName = value; userSeen = true;
+        } else if (key == "temp_path" && !tempSeen) {
+            state.tempPath = value; tempSeen = true;
+        } else if (key == "path" && !pathSeen) {
+            state.pathValue = value; pathSeen = true;
+        } else if (key == "current_directory" && !directorySeen) {
+            state.currentDirectory = value; directorySeen = true;
+        } else if (key == "handler_version" && !versionSeen) {
+            state.handlerVersion = value; versionSeen = true;
+        } else {
+            return std::nullopt;
+        }
     }
+    if (!timestampSeen || !computerSeen || !userSeen || !tempSeen ||
+        !pathSeen || !directorySeen || !versionSeen || state.currentDirectory.empty())
+        return std::nullopt;
     return state;
 }
 
