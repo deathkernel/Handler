@@ -32,18 +32,14 @@ std::string firstLine(const std::string& text) {
     return text.substr(0, p == std::string::npos ? text.size() : p);
 }
 
-bool wingetAvailable() {
 #ifdef _WIN32
+bool wingetAvailable() {
     CommandSpec spec{"winget-version", "winget", {"--version"}, RiskLevel::Low, 15000};
     const auto result = executeCommand(spec);
     return result.started && result.exitCode == 0;
-#else
-    return false;
-#endif
 }
 
 bool verifyWingetSource(std::string& details) {
-#ifdef _WIN32
     CommandSpec spec{"winget-source", "winget",
                      {"source", "list"}, RiskLevel::Low, 30000};
     const auto result = executeCommand(spec);
@@ -57,11 +53,8 @@ bool verifyWingetSource(std::string& details) {
         return false;
     }
     return true;
-#else
-    details = "winget repair is Windows-only";
-    return false;
-#endif
 }
+#endif
 }
 
 std::vector<ToolchainFinding> inspectToolchain(const std::vector<std::string>& tools) {
@@ -122,6 +115,7 @@ std::vector<ToolchainRepair> proposeToolchainRepairs(
 
 bool repairToolchain(const std::string& tool, std::string& details) {
 #ifndef _WIN32
+    (void)tool;
     details = "automatic toolchain repair is not enabled on this platform; inspect the toolchain and use an explicit package-manager action";
     return false;
 #else
