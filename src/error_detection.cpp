@@ -29,7 +29,7 @@ std::vector<DetectedError> detectErrors(const std::string& text) {
         add("MISSING_COMMAND", "A required command/tool was not found.", 95);
     }
     if (containsInsensitive(text, "dependency conflict") || containsInsensitive(text, "conflicting dependencies") ||
-        containsInsensitive(text, "requires") && containsInsensitive(text, "but you have")) {
+        (containsInsensitive(text, "requires") && containsInsensitive(text, "but you have"))) {
         add("DEPENDENCY_CONFLICT", "Dependency requirements appear incompatible.", 90);
     }
     if (containsInsensitive(text, "permission denied") || containsInsensitive(text, "access is denied")) {
