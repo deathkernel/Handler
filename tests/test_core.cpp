@@ -329,6 +329,9 @@ int main() {
     const auto tempRoot = std::filesystem::temp_directory_path() / "handler_snapshot_test";
     std::filesystem::remove_all(tempRoot, ec);
     SnapshotStore snapshots(tempRoot);
+    const auto capturedState = captureEnvironmentState();
+    assert(capturedState.handlerVersion == "0.9.0");
+
     EnvironmentState state;
     state.timestampUtc = "test";
     state.computerName = "machine";
