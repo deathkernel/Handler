@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <cstdlib>
+#include <vector>
 #include "handler/state_paths.h"
 #ifndef _WIN32
 #include <sys/types.h>
@@ -150,6 +151,8 @@ ActionResult executeCommand(const CommandSpec& command) {
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
 
     std::filesystem::path executablePath = command.executablePath;
+    bool useCommandInterpreter = false;
+    std::filesystem::path batchExecutable;
     if (!executablePath.empty()) {
         std::error_code ec;
         const auto absolute = std::filesystem::absolute(executablePath, ec);
@@ -194,19 +197,43 @@ ActionResult executeCommand(const CommandSpec& command) {
             return {false, -1, {}, "configured executable path is outside Handler trusted roots"};
 
         executablePath = canonical;
+        if (_wcsicmp(canonical.filename().wstring().c_str(), L"npm.cmd") == 0) {
+            useCommandInterpreter = true;
+            batchExecutable = canonical;
+            const char* windir = std::getenv("WINDIR");
+            if (!windir || !*windir)
+                return {false, -1, {}, "WINDIR is unavailable for npm command interpreter"};
+            executablePath = std::filesystem::path(windir) / "System32" / "cmd.exe";
+            if (!trustedWindowsExecutable(executablePath))
+                return {false, -1, {}, "trusted command interpreter was not found"};
+        }
     } else {
         wchar_t resolved[MAX_PATH]{};
         const std::wstring executable = toWide(command.executable);
         if (executable.empty())
             return {false, -1, {}, "executable is not valid UTF-8"};
 
-        if (SearchPathW(nullptr, executable.c_str(), L".exe",
-                        MAX_PATH, resolved, nullptr) == 0)
+        DWORD length = 0;
+        if (command.executable == "npm" || command.executable == "npm.cmd")
+            length = SearchPathW(nullptr, L"npm.cmd", nullptr, MAX_PATH, resolved, nullptr);
+        else
+            length = SearchPathW(nullptr, executable.c_str(), L".exe", MAX_PATH, resolved, nullptr);
+        if (length == 0 || length >= MAX_PATH)
             return {false, -1, {}, "allowlisted executable was not found on PATH"};
 
         executablePath = std::filesystem::path(resolved);
         if (!trustedWindowsExecutable(executablePath))
             return {false, -1, {}, "resolved executable is outside Handler trusted installation roots"};
+        if (_wcsicmp(executablePath.filename().wstring().c_str(), L"npm.cmd") == 0) {
+            useCommandInterpreter = true;
+            batchExecutable = executablePath;
+            const char* windir = std::getenv("WINDIR");
+            if (!windir || !*windir)
+                return {false, -1, {}, "WINDIR is unavailable for npm command interpreter"};
+            executablePath = std::filesystem::path(windir) / "System32" / "cmd.exe";
+            if (!trustedWindowsExecutable(executablePath))
+                return {false, -1, {}, "trusted command interpreter was not found"};
+        }
     }
 
     if (!command.workingDirectory.empty()) {
@@ -238,7 +265,19 @@ ActionResult executeCommand(const CommandSpec& command) {
     startup.hStdError = writePipe;
 
     PROCESS_INFORMATION process{};
-    std::wstring commandLine = buildWideCommandLine(command);
+    std::wstring commandLine;
+    if (useCommandInterpreter) {
+        commandLine = quoteWideArgument(executablePath);
+        commandLine += L" /d /c \\\"";
+        commandLine += quoteWideArgument(batchExecutable);
+        for (const auto& argument : command.arguments) {
+            commandLine.push_back(L' ');
+            commandLine += quoteWideArgument(toWide(argument));
+        }
+        commandLine += L"\\\"";
+    } else {
+        commandLine = buildWideCommandLine(command);
+    }
     const std::wstring workingDirectory = toWide(command.workingDirectory);
 
     const BOOL created = CreateProcessW(
