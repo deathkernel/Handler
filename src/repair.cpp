@@ -83,6 +83,24 @@ std::string installedPythonPackageVersion(const std::filesystem::path& pythonPat
     const auto last = version.find_last_not_of(" \t");
     if (first == std::string::npos) return {};
     return version.substr(first, last - first + 1);
+std::string installedNodePackageVersion(const std::filesystem::path& projectRoot,
+                                        const std::string& package) {
+    CommandSpec query{"node-repair-precheck", "npm",
+                      {"ls", package, "--depth=0", "--json"},
+                      RiskLevel::Low, 30000};
+    query.workingDirectory = projectRoot;
+    const auto result = executeCommand(query);
+    if (!result.started || result.exitCode != 0) return {};
+    const std::string marker = ""version":";
+    const auto pos = result.output.find(marker);
+    if (pos == std::string::npos) return {};
+    const auto begin = result.output.find('"', pos + marker.size());
+    if (begin == std::string::npos) return {};
+    const auto endQuote = result.output.find('"', begin + 1);
+    if (endQuote == std::string::npos) return {};
+    return result.output.substr(begin + 1, endQuote - begin - 1);
+}
+
 }
 
 } // namespace
@@ -203,6 +221,8 @@ int repairNodeModule(const char* rawPackage) {
     std::cout << "Node repair requested for: " << package << "\n"
               << "Target project: " << projectRoot << "\n";
 
+    const std::string previousVersion = installedNodePackageVersion(projectRoot, package);
+
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
         std::cout << policy.reason << " [y/N]: ";
@@ -255,7 +275,7 @@ int repairNodeModule(const char* rawPackage) {
             rollback.workingDirectory = projectRoot;
             const auto result = executeCommand(rollback);
             if (!result.started || result.exitCode != 0) return false;
-            return true;
+            return installedNodePackageVersion(projectRoot, package) == previousVersion;
         });
 
     History history(repairStateRoot() / "history.log");
