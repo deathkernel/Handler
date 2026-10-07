@@ -1,4 +1,5 @@
 #include "handler/environment_guardian.h"
+#include "handler/state_paths.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -30,6 +31,9 @@ bool nameEquals(const std::string& a, const std::string& b) {
     return a == b;
 #endif
 }
+bool trustedBaseline(const std::filesystem::path& file) {
+    return isHandlerStatePath(file);
+}
 }
 std::vector<VariableFinding> inspectEnvironmentVariables(const std::vector<std::string>& names) {
     std::vector<VariableFinding> out;
@@ -52,6 +56,7 @@ bool isSensitiveVariable(const std::string& name) {
 }
 bool saveEnvironmentBaseline(const std::filesystem::path& file,
                              const std::vector<std::string>& names) {
+    if (!trustedBaseline(file)) return false;
     std::error_code ec;
     std::filesystem::create_directories(file.parent_path(), ec);
     if (ec) return false;
@@ -65,6 +70,7 @@ bool saveEnvironmentBaseline(const std::filesystem::path& file,
 }
 bool loadEnvironmentBaseline(const std::filesystem::path& file,
                              std::vector<EnvironmentEntry>& entries) {
+    if (!trustedBaseline(file)) return false;
     std::ifstream in(file);
     if (!in) return false;
     entries.clear();
@@ -72,8 +78,9 @@ bool loadEnvironmentBaseline(const std::filesystem::path& file,
     while (std::getline(in, line)) {
         const auto pos = line.find('=');
         if (pos == std::string::npos || pos == 0) continue;
-        entries.push_back({line.substr(0, pos), line.substr(pos + 1),
-                           EnvironmentScope::Process});
+        const auto name = line.substr(0, pos);
+        if (isSensitiveVariable(name)) continue;
+        entries.push_back({name, line.substr(pos + 1), EnvironmentScope::Process});
     }
     return !entries.empty();
 }
