@@ -263,12 +263,28 @@ ActionResult executeCommand(const CommandSpec& command) {
         return {false, -1, {}, "failed to protect output pipe"};
     }
 
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-    startup.hStdOutput = writePipe;
-    startup.hStdError = writePipe;
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    startup.StartupInfo.hStdOutput = writePipe;
+    startup.StartupInfo.hStdError = writePipe;
+
+    HANDLE inheritedHandles[] = {writePipe};
+    SIZE_T attributeSize = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeSize);
+    std::vector<unsigned char> attributeBuffer(attributeSize);
+    startup.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeBuffer.data());
+    if (attributeBuffer.empty() ||
+        !InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &attributeSize) ||
+        !UpdateProcThreadAttribute(
+            startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            inheritedHandles, sizeof(inheritedHandles), nullptr, nullptr)) {
+        if (startup.lpAttributeList) DeleteProcThreadAttributeList(startup.lpAttributeList);
+        CloseHandle(readPipe);
+        CloseHandle(writePipe);
+        return {false, -1, {}, "failed to configure child handle allowlist"};
+    }
 
     PROCESS_INFORMATION process{};
     std::wstring commandLine;
@@ -288,10 +304,11 @@ ActionResult executeCommand(const CommandSpec& command) {
 
     const BOOL created = CreateProcessW(
         executablePath.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW, nullptr,
+        CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr,
         workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
-        &startup, &process);
+        &startup.StartupInfo, &process);
 
+    DeleteProcThreadAttributeList(startup.lpAttributeList);
     CloseHandle(writePipe);
 
     if (!created) {
