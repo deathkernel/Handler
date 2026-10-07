@@ -37,6 +37,7 @@ Audit scope:
 - PATH and environment baselines are accepted only from Handler-owned persistent state.
 - Transaction artifact filenames now include a deterministic source-path digest, preventing same-named artifacts from different projects from overwriting one another.
 - Transaction artifacts now carry a content fingerprint; restore rejects same-size backup tampering and verifies the restored file fingerprint before reporting success.
+- Recovery journals now fail closed at transaction boundaries, track active action/verification stages, detect interrupted transactions, and block subsequent high-risk mutations until the interrupted state is reviewed.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Second-pass audit status
@@ -56,7 +57,7 @@ The second pass found and fixed three additional Windows execution-boundary issu
 
 The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation. The executable trust policy is also centralized so future trust-boundary changes cannot silently diverge between execution and discovery paths.
 
-GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed for commit `466b87b5d01e5c4e3f5b0e7bdd930d70f5371493`. The subsequent Python-repair trust-boundary changes are pending their own CI verification.
+GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed for commit `466b87b5d01e5c4e3f5b0e7bdd930d70f5371493`. Subsequent Python-repair, transaction-integrity, and interrupted-transaction changes are pending their own CI verification.
 
 ## Remaining bounded limitations
 
@@ -70,7 +71,7 @@ GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; al
 
 ## Audit conclusion
 
-The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The previously verified CI run #548 is green across all three supported CI operating systems; the latest Python-repair trust-boundary change remains gated on its newer CI run.
+The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The previously verified CI run #548 is green across all three supported CI operating systems; the latest transaction-recovery changes remain gated on their newer CI run.
 
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
 
