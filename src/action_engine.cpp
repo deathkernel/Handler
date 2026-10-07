@@ -180,7 +180,7 @@ ActionResult executeCommand(const CommandSpec& command) {
             return {false, -1, {}, "allowlisted executable was not found on PATH"};
 
         executablePath = std::filesystem::path(resolved);
-        if (!trustedWindowsExecutable(executablePath))
+        if (!isTrustedExecutablePath(executablePath))
             return {false, -1, {}, "resolved executable is outside Handler trusted installation roots"};
         if (_wcsicmp(executablePath.filename().wstring().c_str(), L"npm.cmd") == 0) {
             useCommandInterpreter = true;
@@ -189,7 +189,7 @@ ActionResult executeCommand(const CommandSpec& command) {
             if (!windir || !*windir)
                 return {false, -1, {}, "WINDIR is unavailable for npm command interpreter"};
             executablePath = std::filesystem::path(windir) / "System32" / "cmd.exe";
-            if (!trustedWindowsExecutable(executablePath))
+            if (!isTrustedExecutablePath(executablePath))
                 return {false, -1, {}, "trusted command interpreter was not found"};
         }
     }
