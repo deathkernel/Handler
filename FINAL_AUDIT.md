@@ -47,6 +47,7 @@ The second pass found and fixed three additional Windows execution-boundary issu
 3. Child-process handle inheritance was narrowed to the output pipe instead of inheriting every inheritable handle in the Handler process.
 4. Windows process containment now fails closed if the Job Object cannot be created, configured, or assigned; Handler no longer proceeds with an uncontained child process.
 5. Automated Node.js dependency repair/upgrade uses npm `--ignore-scripts` so package lifecycle scripts are not executed implicitly by Handler.
+6. Node dependency rollback now restores package metadata and reconstructs `node_modules` with `npm ci --ignore-scripts` when a lockfile is present, avoiding a manifest-only rollback.
 
 The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation.
 
