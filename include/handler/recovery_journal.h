@@ -14,6 +14,7 @@ public:
                 const std::string& details) const;
     static std::string newTransactionId();
     std::vector<std::string> unfinishedTransactionIds() const;
+    bool hasCorruptEntries() const;
     bool hasUnfinishedTransaction() const;
 
 private:
