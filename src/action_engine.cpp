@@ -317,17 +317,29 @@ ActionResult executeCommand(const CommandSpec& command) {
     }
 
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
-    if (job) {
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-        limits.BasicLimitInformation.LimitFlags =
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        const BOOL configured = SetInformationJobObject(
-            job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
-        const BOOL assigned = configured && AssignProcessToJobObject(job, process.hProcess);
-        if (!assigned) {
-            CloseHandle(job);
-            job = nullptr;
-        }
+    if (!job) {
+        TerminateProcess(process.hProcess, 125);
+        WaitForSingleObject(process.hProcess, 5000);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        CloseHandle(readPipe);
+        return {false, -1, {}, "failed to create process containment job"};
+    }
+
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+    limits.BasicLimitInformation.LimitFlags =
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    const BOOL configured = SetInformationJobObject(
+        job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+    const BOOL assigned = configured && AssignProcessToJobObject(job, process.hProcess);
+    if (!assigned) {
+        TerminateProcess(process.hProcess, 125);
+        WaitForSingleObject(process.hProcess, 5000);
+        CloseHandle(job);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        CloseHandle(readPipe);
+        return {false, -1, {}, "failed to assign process to containment job"};
     }
 
     std::string output;
