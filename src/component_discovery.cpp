@@ -24,7 +24,7 @@ bool pathComponentEqual(const std::filesystem::path& left,
 #endif
 }
 
-bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& root) {
+[[maybe_unused]] bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& root) {
     std::error_code ec;
     const auto c = std::filesystem::weakly_canonical(child, ec);
     if (ec) return false;
@@ -39,7 +39,7 @@ bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& 
     return ri == r.end();
 }
 
-bool trustedPath(const std::filesystem::path& path) {
+[[maybe_unused]] bool trustedPath(const std::filesystem::path& path) {
 #ifdef _WIN32
     std::error_code ec;
     const auto canonical = std::filesystem::weakly_canonical(path, ec);
