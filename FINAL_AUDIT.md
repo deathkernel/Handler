@@ -63,6 +63,7 @@ GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; al
 - Linux/macOS automatic toolchain package repair remains disabled.
 - Dependency solving is intentionally lightweight and is not a full lockfile SAT/resolution engine.
 - Automated npm repair/upgrade intentionally skips package lifecycle scripts; projects that require install scripts need an explicit package-manager workflow outside this automated repair path.
+- Automated Python repair/upgrade intentionally requires binary wheels; packages available only as source distributions are blocked from this automated path and require an explicit package-manager workflow.
 - Deep cleanup code exists as a low-level foundation but is not exposed as a CLI capability.
 - CLI integration coverage is smaller than unit-level coverage; CI validates build + core test executable on all three supported CI operating systems.
 
