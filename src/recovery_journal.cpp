@@ -50,7 +50,8 @@ bool handler::RecoveryJournal::hasUnfinishedTransaction() const {
             stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN")
             active = true;
         else if (stage == "COMMIT" || stage == "ROLLBACK" ||
-                 stage == "ABORT" || stage == "RECOVERY_REQUIRED")
+                 stage == "ABORT" || stage == "RECOVERY_REQUIRED" ||
+                 stage == "MANUAL_ROLLBACK" || stage == "RECOVERY_COMPLETE")
             active = false;
     }
     return active;
