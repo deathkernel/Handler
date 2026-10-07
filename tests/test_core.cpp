@@ -66,7 +66,7 @@ int main() {
         assert(std::filesystem::is_regular_file(component.path));
     }
 
-    const discoveryRoot = std::filesystem::temp_directory_path() / "handler-discovery-boundary";
+    const auto discoveryRoot = std::filesystem::current_path() / ".handler-discovery-boundary";
     std::filesystem::remove_all(discoveryRoot, testEc);
     std::filesystem::create_directories(discoveryRoot, testEc);
     assert(!testEc);
