@@ -1,14 +1,55 @@
 #include "handler/recovery_journal.h"
 
+#include <atomic>
 #include <chrono>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 #include <string>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace handler {
+namespace {
+
+bool isActiveStage(const std::string& stage) {
+    return stage == "START" || stage == "SNAPSHOT" ||
+           stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN";
+}
+
+bool isTerminalStage(const std::string& stage) {
+    return stage == "COMMIT" || stage == "ROLLBACK" ||
+           stage == "ABORT" || stage == "RECOVERY_REQUIRED" ||
+           stage == "MANUAL_ROLLBACK" || stage == "RECOVERY_COMPLETE";
+}
+
+std::string processIdString() {
+#ifdef _WIN32
+    return std::to_string(static_cast<unsigned long long>(GetCurrentProcessId()));
+#else
+    return std::to_string(static_cast<unsigned long long>(getpid()));
+#endif
+}
+
+std::string nextCounter() {
+    static std::atomic<unsigned long long> counter{0};
+    return std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
+}
+
+} // namespace
 
 RecoveryJournal::RecoveryJournal(std::filesystem::path file) : file_(std::move(file)) {}
+
+std::string RecoveryJournal::newTransactionId() {
+    const auto now = std::chrono::system_clock::now().time_since_epoch().count();
+    return std::to_string(static_cast<unsigned long long>(now)) +
+           "-" + processIdString() + "-" + nextCounter();
+}
 
 bool RecoveryJournal::record(const std::string& stage, const std::string& details) const {
     std::error_code ec;
@@ -27,32 +68,88 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
     gmtime_r(&now, &utc);
 #endif
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
-        << " | " << stage << " | " << details << '\n';
+        << " | " << stage << " | " << details << '
+';
     return out.good();
 }
 
-} // namespace handler
+bool RecoveryJournal::record(const std::string& transactionId,
+                             const std::string& stage,
+                             const std::string& details) const {
+    if (transactionId.empty()) return false;
 
-bool handler::RecoveryJournal::hasUnfinishedTransaction() const {
-    std::ifstream in(file_);
-    if (!in) return false;
+    std::error_code ec;
+    if (!file_.parent_path().empty())
+        std::filesystem::create_directories(file_.parent_path(), ec);
+    if (ec) return false;
 
-    std::string line;
-    bool active = false;
-    while (std::getline(in, line)) {
-        const auto delimiter = line.find(" | ");
-        if (delimiter == std::string::npos) continue;
-        const auto stageStart = delimiter + 3;
-        const auto stageEnd = line.find(" | ", stageStart);
-        if (stageEnd == std::string::npos) continue;
-        const auto stage = line.substr(stageStart, stageEnd - stageStart);
-        if (stage == "START" || stage == "SNAPSHOT" ||
-            stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN")
-            active = true;
-        else if (stage == "COMMIT" || stage == "ROLLBACK" ||
-                 stage == "ABORT" || stage == "RECOVERY_REQUIRED" ||
-                 stage == "MANUAL_ROLLBACK" || stage == "RECOVERY_COMPLETE")
-            active = false;
-    }
-    return active;
+    std::ofstream out(file_, std::ios::app);
+    if (!out) return false;
+
+    const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm utc{};
+#ifdef _WIN32
+    gmtime_s(&utc, &now);
+#else
+    gmtime_r(&now, &utc);
+#endif
+    out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
+        << " | tx=" << transactionId
+        << " | " << stage
+        << " | " << details << '
+';
+    return out.good();
 }
+
+std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
+    std::ifstream in(file_);
+    if (!in) return {};
+
+    std::vector<std::string> activeIds;
+    bool legacyActive = false;
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto first = line.find(" | ");
+        if (first == std::string::npos) continue;
+        const auto second = line.find(" | ", first + 3);
+        if (second == std::string::npos) continue;
+
+        const auto firstField = line.substr(first + 3, second - (first + 3));
+        std::string transactionId;
+        std::string stage;
+        if (firstField.rfind("tx=", 0) == 0) {
+            transactionId = firstField.substr(3);
+            const auto third = line.find(" | ", second + 3);
+            if (third == std::string::npos) continue;
+            stage = line.substr(second + 3, third - (second + 3));
+        } else {
+            stage = firstField;
+        }
+
+        if (isActiveStage(stage)) {
+            if (transactionId.empty()) {
+                legacyActive = true;
+            } else if (std::find(activeIds.begin(), activeIds.end(), transactionId) == activeIds.end()) {
+                activeIds.push_back(transactionId);
+            }
+        } else if (isTerminalStage(stage)) {
+            if (transactionId.empty()) {
+                legacyActive = false;
+            } else {
+                activeIds.erase(
+                    std::remove(activeIds.begin(), activeIds.end(), transactionId),
+                    activeIds.end());
+            }
+        }
+    }
+
+    if (legacyActive)
+        activeIds.emplace_back();
+    return activeIds;
+}
+
+bool RecoveryJournal::hasUnfinishedTransaction() const {
+    return !unfinishedTransactionIds().empty();
+}
+
+} // namespace handler
