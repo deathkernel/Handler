@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <cwctype>
 
 namespace handler {
@@ -27,7 +28,9 @@ std::filesystem::path handlerTransactionRoot() {
 
 bool isHandlerStatePath(const std::filesystem::path& file) {
     std::error_code ec;
-    const auto root = std::filesystem::weakly_canonical(handlerStateRoot(), ec);
+    const auto rootPath = handlerStateRoot();
+    if (!std::filesystem::exists(rootPath, ec) || ec) return false;
+    const auto root = std::filesystem::weakly_canonical(rootPath, ec);
     if (ec || root.empty()) return false;
     ec.clear();
     const auto candidate = std::filesystem::weakly_canonical(file, ec);
