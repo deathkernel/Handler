@@ -378,7 +378,8 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
                     RiskLevel::High, 120000};
                 rollback.executablePath = pythonProjectExecutable(projectRoot);
                 const auto r = executeCommand(rollback);
-                return r.started && r.exitCode == 0;
+                if (!r.started || r.exitCode != 0) return false;
+                return installedDependencyVersion(ecosystem, package, projectRoot).empty();
             }
 
             CommandSpec rollback{"dependency-upgrade-rollback", "python",
@@ -387,7 +388,8 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
                 RiskLevel::High, 120000};
             rollback.executablePath = pythonProjectExecutable(projectRoot);
             const auto r = executeCommand(rollback);
-            return r.started && r.exitCode == 0;
+            if (!r.started || r.exitCode != 0) return false;
+            return installedDependencyVersion(ecosystem, package, projectRoot) == current;
         });
 
     History history(dependencyStateRoot()/"history.log");
