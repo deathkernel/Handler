@@ -9,6 +9,7 @@ class RecoveryJournal {
 public:
     explicit RecoveryJournal(std::filesystem::path file);
     bool record(const std::string& stage, const std::string& details) const;
+    bool hasUnfinishedTransaction() const;
 
 private:
     std::filesystem::path file_;
