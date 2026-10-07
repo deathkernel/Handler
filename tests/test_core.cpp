@@ -60,6 +60,17 @@ int main() {
     assert(restoredText == "handler-batch-2");
     std::filesystem::remove_all(backupBase, testEc);
 
+    const auto blockedBackupRoot = backupBase / "backup-root-file";
+    {
+        std::ofstream out(blockedBackupRoot);
+        out << "not a directory";
+    }
+    const auto failedBackup = backupArtifact(original, blockedBackupRoot);
+    assert(!failedBackup.has_value());
+
+    ArtifactBackup missingBackup{original, backupBase / "missing.bak", true, 1, 1};
+    assert(!restoreArtifact(missingBackup));
+
     const auto discovered = discoverComponents({"python", "definitely-not-a-handler-tool"});
     assert(discovered.size() <= 1);
     for (const auto& component : discovered) {
