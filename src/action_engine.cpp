@@ -419,7 +419,6 @@ ActionResult executeCommand(const CommandSpec& command) {
         const auto canonical = std::filesystem::weakly_canonical(command.executablePath, ec);
         if (ec || !std::filesystem::is_regular_file(canonical, ec))
             return {false, -1, {}, "configured executable path does not exist"};
-        command.executablePath = canonical;
     }
 
     if (!command.workingDirectory.empty()) {
