@@ -48,13 +48,14 @@ The second pass found and fixed three additional Windows execution-boundary issu
 4. Windows process containment now fails closed if the Job Object cannot be created, configured, or assigned; Handler no longer proceeds with an uncontained child process.
 5. Automated Node.js dependency repair/upgrade uses npm `--ignore-scripts` so package lifecycle scripts are not executed implicitly by Handler.
 6. Node dependency rollback now restores package metadata and reconstructs `node_modules` with `npm ci --ignore-scripts` when a lockfile is present, avoiding a manifest-only rollback.
-7. Unix command execution now honors and canonicalizes explicit executable paths, so project-local Python repairs cannot silently fall back to PATH/global Python.
-8. Cross-platform compiler warnings uncovered during CI were cleaned up, including ambiguous boolean precedence, unused security helpers, and platform-specific toolchain helpers.
-9. Regression coverage now explicitly rejects malformed dependency package names before any registry or install command is reached.
+7. Python dependency upgrade and module-repair rollback now restore the previously installed package version, or uninstall it when it was previously absent, avoiding manifest-only rollback.
+8. Unix command execution now honors and canonicalizes explicit executable paths, so project-local Python repairs cannot silently fall back to PATH/global Python.
+9. Cross-platform compiler warnings uncovered during CI were cleaned up, including ambiguous boolean precedence, unused security helpers, and platform-specific toolchain helpers.
+10. Regression coverage now explicitly rejects malformed dependency package names before any registry or install command is reached.
 
 The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation.
 
-A local build could not be executed in this audit environment because outbound GitHub cloning/DNS is unavailable. Therefore compile/test status is **not asserted** here; the GitHub Actions run remains the authoritative build gate.
+GitHub Actions run #524 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed. This CI result is the authoritative post-fix build gate.
 
 ## Remaining bounded limitations
 
@@ -67,7 +68,7 @@ A local build could not be executed in this audit environment because outbound G
 
 ## Audit conclusion
 
-The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The final CI run for this audit branch is the release gate; no claim of post-fix green status is made until that run completes.
+The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The final CI run #524 is green across all three supported CI operating systems.
 
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
 
