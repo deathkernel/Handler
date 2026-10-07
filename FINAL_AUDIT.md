@@ -58,7 +58,7 @@ A local build could not be executed in this audit environment because outbound G
 
 ## Remaining bounded limitations
 
-- Toolchain package-manager rollback is intentionally not implemented; Handler retains the recovery snapshot and reports that package downgrade was not attempted.
+- Windows toolchain rollback is implemented for supported winget targets: Handler captures the installed version before upgrade, attempts an exact-version reinstall on failure, and verifies the restored version and health.
 - Linux/macOS automatic toolchain package repair remains disabled.
 - Dependency solving is intentionally lightweight and is not a full lockfile SAT/resolution engine.
 - Automated npm repair/upgrade intentionally skips package lifecycle scripts; projects that require install scripts need an explicit package-manager workflow outside this automated repair path.
