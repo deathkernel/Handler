@@ -46,7 +46,8 @@ bool handler::RecoveryJournal::hasUnfinishedTransaction() const {
         const auto stageEnd = line.find(" | ", stageStart);
         if (stageEnd == std::string::npos) continue;
         const auto stage = line.substr(stageStart, stageEnd - stageStart);
-        if (stage == "START" || stage == "SNAPSHOT")
+        if (stage == "START" || stage == "SNAPSHOT" ||
+            stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN")
             active = true;
         else if (stage == "COMMIT" || stage == "ROLLBACK" ||
                  stage == "ABORT" || stage == "RECOVERY_REQUIRED")
