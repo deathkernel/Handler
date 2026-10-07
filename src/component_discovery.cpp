@@ -15,6 +15,15 @@
 namespace handler {
 
 namespace {
+bool pathComponentEqual(const std::filesystem::path& left,
+                        const std::filesystem::path& right) {
+#ifdef _WIN32
+    return _wcsicmp(left.wstring().c_str(), right.wstring().c_str()) == 0;
+#else
+    return left == right;
+#endif
+}
+
 bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& root) {
     std::error_code ec;
     const auto c = std::filesystem::weakly_canonical(child, ec);
@@ -25,7 +34,7 @@ bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& 
     auto ci = c.begin();
     auto ri = r.begin();
     for (; ri != r.end() && ci != c.end(); ++ri, ++ci) {
-        if (_wcsicmp(ri->wstring().c_str(), ci->wstring().c_str()) != 0) return false;
+        if (!pathComponentEqual(*ri, *ci)) return false;
     }
     return ri == r.end();
 }
@@ -59,12 +68,13 @@ bool trustedPath(const std::filesystem::path& path) {
         auto b = canonical.begin();
         bool same = true;
         for (; a != r.end() && b != canonical.end(); ++a, ++b) {
-            if (_wcsicmp(a->wstring().c_str(), b->wstring().c_str()) != 0) { same = false; break; }
+            if (!pathComponentEqual(*a, *b)) { same = false; break; }
         }
         if (same && a == r.end()) return true;
     }
     return false;
 #else
+    (void)path;
     return true;
 #endif
 }
