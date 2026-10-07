@@ -93,3 +93,8 @@ The repository is release-oriented within its documented scope, but the limitati
 - Package rollback avoids npm lifecycle scripts and restricts Python rollback to binary wheels.
 - Node version discovery now targets the requested dependency entry rather than the root project's first version field.
 - If backup creation fails before the package-manager action is attempted, rollback does not reinstall or otherwise mutate the project.
+## Latest snapshot integrity hardening
+
+- Recovery snapshot loading now rejects malformed records instead of silently ignoring unknown or duplicate fields.
+- All required snapshot fields must be present before a snapshot can be applied; an empty current-directory field is rejected.
+- Added regression coverage proving an injected unknown snapshot field is rejected.
