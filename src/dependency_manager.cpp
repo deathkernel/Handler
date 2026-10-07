@@ -383,7 +383,7 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
 
             CommandSpec rollback{"dependency-upgrade-rollback", "python",
                 {"-m", "pip", "install", package + "==" + current,
-                 "--disable-pip-version-check"},
+                 "--disable-pip-version-check", "--only-binary=:all:"},
                 RiskLevel::High, 120000};
             rollback.executablePath = pythonProjectExecutable(projectRoot);
             const auto r = executeCommand(rollback);
