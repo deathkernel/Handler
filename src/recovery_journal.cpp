@@ -29,6 +29,10 @@ bool isTerminalStage(const std::string& stage) {
            stage == "ABORT" || stage == "MANUAL_ROLLBACK" || stage == "RECOVERY_COMPLETE";
 }
 
+bool isKnownStage(const std::string& stage) {
+    return isActiveStage(stage) || isTerminalStage(stage);
+}
+
 std::string processIdString() {
 #ifdef _WIN32
     return std::to_string(static_cast<unsigned long long>(GetCurrentProcessId()));
@@ -53,6 +57,8 @@ std::string RecoveryJournal::newTransactionId() {
 }
 
 bool RecoveryJournal::record(const std::string& stage, const std::string& details) const {
+    if (!isKnownStage(stage)) return false;
+
     std::error_code ec;
     if (!file_.parent_path().empty())
         std::filesystem::create_directories(file_.parent_path(), ec);
@@ -77,7 +83,7 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
 bool RecoveryJournal::record(const std::string& transactionId,
                              const std::string& stage,
                              const std::string& details) const {
-    if (transactionId.empty()) return false;
+    if (transactionId.empty() || !isKnownStage(stage)) return false;
 
     std::error_code ec;
     if (!file_.parent_path().empty())
@@ -168,8 +174,9 @@ bool RecoveryJournal::hasCorruptEntries() const {
             const auto third = line.find(" | ", second + 3);
             if (third == std::string::npos) return true;
             const auto stage = line.substr(second + 3, third - (second + 3));
-            if (stage.empty()) return true;
+            if (stage.empty() || !isKnownStage(stage)) return true;
         } else if (firstField.empty()) {
+            if (!isKnownStage(firstField)) return true;
             return true;
         }
     }
