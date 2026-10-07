@@ -176,12 +176,6 @@ bool depAtomMatches(const DependencyVersion& v,const DepAtom& a) {
     if(a.op=="<=") return !depLess(a.v,v);
     return false;
 }
-bool validDependencyPackage(const std::string& p) {
-    if(p.empty()||p.size()>128) return false;
-    for(unsigned char ch:p)
-        if(!(std::isalnum(ch)||ch=='-'||ch=='_'||ch=='.'||ch=='@'||ch=='/')) return false;
-    return true;
-}
 std::filesystem::path dependencyStateRoot() { return handlerStateRoot(); }
 std::filesystem::path pythonProjectExecutable(const std::filesystem::path& root) {
     for (const auto& name : {std::string(".venv"), std::string("venv")}) {
@@ -337,12 +331,15 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
 
     const auto artifactRoot=dependencyStateRoot()/"transactions"/"artifacts"/"dependency-upgrade";
     std::vector<ArtifactBackup> backups;
-    if(ecosystem=="Python")
-        for(const auto& file:{projectRoot/"requirements.txt",projectRoot/"pyproject.toml"})
-            if(auto b=backupArtifact(file,artifactRoot/"python")) backups.push_back(*b);
-    else
-        for(const auto& file:{projectRoot/"package.json",projectRoot/"package-lock.json"})
-            if(auto b=backupArtifact(file,artifactRoot/"node")) backups.push_back(*b);
+    if (ecosystem == "Python") {
+        for (const auto& file : {projectRoot/"requirements.txt", projectRoot/"pyproject.toml"}) {
+            if (auto b = backupArtifact(file, artifactRoot/"python")) backups.push_back(*b);
+        }
+    } else {
+        for (const auto& file : {projectRoot/"package.json", projectRoot/"package-lock.json"}) {
+            if (auto b = backupArtifact(file, artifactRoot/"node")) backups.push_back(*b);
+        }
+    }
 
     Transaction tx(SafetyMode::Confirm);
     const auto result=tx.runApproved(RiskLevel::High,
