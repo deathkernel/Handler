@@ -212,7 +212,7 @@ int repairNodeModule(const char* rawPackage) {
         RiskLevel::High,
         [&] {
             CommandSpec install{"node-repair", "npm",
-                {"install", package, "--no-audit", "--no-fund"},
+                {"install", package, "--no-audit", "--no-fund", "--ignore-scripts"},
                 RiskLevel::High, 180000};
             install.workingDirectory = projectRoot;
             const auto r = executeCommand(install);
