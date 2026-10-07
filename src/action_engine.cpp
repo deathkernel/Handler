@@ -8,6 +8,8 @@
 #include <chrono>
 #include <algorithm>
 #include <cwctype>
+#include <cstdlib>
+#include "handler/state_paths.h"
 #ifndef _WIN32
 #include <sys/types.h>
 #include <cerrno>
@@ -178,7 +180,20 @@ ActionResult executeCommand(const CommandSpec& command) {
         if (!validPath)
             return {false, -1, {}, "configured executable path does not match the allowlisted tool"};
 
-        executablePath = absolute;
+        std::error_code trustEc;
+        const auto canonical = std::filesystem::weakly_canonical(absolute, trustEc);
+        if (trustEc)
+            return {false, -1, {}, "configured executable path could not be canonicalized"};
+
+        bool trusted = trustedWindowsExecutable(canonical);
+        if (!trusted && !command.workingDirectory.empty())
+            trusted = pathUnder(canonical, command.workingDirectory);
+        if (!trusted && isHandlerStatePath(canonical))
+            trusted = true;
+        if (!trusted)
+            return {false, -1, {}, "configured executable path is outside Handler trusted roots"};
+
+        executablePath = canonical;
     } else {
         wchar_t resolved[MAX_PATH]{};
         const std::wstring executable = toWide(command.executable);
