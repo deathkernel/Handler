@@ -574,13 +574,60 @@ int runTempCleanup(bool dryRun = false) {
 
     std::cout << (dryRun ? "Previewing: " : "Cleaning: ")
               << health.tempPath << "\n";
+
+    if (dryRun) {
+        const auto result = handler::cleanTempDirectory(
+            std::filesystem::path(health.tempPath), true);
+        handler::printCleanupResult(result);
+        makeHistory().record("TEMP_CLEANUP",
+            "files=" + std::to_string(result.filesRemoved) +
+            ", skipped=" + std::to_string(result.skipped) +
+            ", dry_run=true");
+        return 0;
+    }
+
+    if (mutationBlockedByInterruptedTransaction()) return 1;
+
+    handler::TransactionLock cleanupLock(transactionRoot() / "transaction.lock");
+    if (!cleanupLock.acquire()) {
+        std::cerr << "TEMP cleanup blocked: another Handler transaction is active.\n";
+        return 1;
+    }
+
+    handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
+    const auto transactionId = handler::RecoveryJournal::newTransactionId();
+    if (!journal.record(transactionId, "START", "TEMP cleanup transaction started")) {
+        std::cerr << "TEMP cleanup blocked: recovery journal unavailable.\n";
+        return 1;
+    }
+    if (!journal.record(transactionId, "ACTION_BEGIN", "TEMP cleanup mutation started")) {
+        std::cerr << "TEMP cleanup blocked: recovery journal could not record mutation start.\n";
+        return 1;
+    }
+
     const auto result = handler::cleanTempDirectory(
-        std::filesystem::path(health.tempPath), dryRun);
+        std::filesystem::path(health.tempPath), false);
     handler::printCleanupResult(result);
+
+    const bool completed = journal.record(
+        transactionId,
+        result.lockedSkipped == 0 ? "COMMIT" : "RECOVERY_REQUIRED",
+        "TEMP cleanup completed; files=" + std::to_string(result.filesRemoved) +
+            ", skipped=" + std::to_string(result.skipped));
     makeHistory().record("TEMP_CLEANUP",
         "files=" + std::to_string(result.filesRemoved) +
         ", skipped=" + std::to_string(result.skipped) +
-        ", dry_run=" + std::string(dryRun ? "true" : "false"));
+        ", dry_run=false");
+
+    if (!completed) {
+        std::cerr << "TEMP cleanup completed, but recovery journal persistence failed; "
+                     "review recovery state before further mutations.\n";
+        return 1;
+    }
+    if (result.lockedSkipped != 0) {
+        std::cerr << "TEMP cleanup completed partially; recovery review is required.\n";
+        return 1;
+    }
     return 0;
 }
 
