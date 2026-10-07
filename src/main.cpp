@@ -587,6 +587,14 @@ std::filesystem::path transactionRoot() {
     return stateRoot() / "transactions";
 }
 
+bool mutationBlockedByInterruptedTransaction() {
+    handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
+    if (!journal.hasUnfinishedTransaction()) return false;
+    std::cerr << "Operation blocked: an interrupted transaction requires recovery review. "
+                 "Run 'handler history' and inspect the transaction journal before retrying.\n";
+    return true;
+}
+
 int runSnapshots() {
     handler::SnapshotStore store(transactionRoot() / "snapshots");
     const auto snapshots = store.list();
@@ -813,15 +821,18 @@ int main(int argc, char* argv[]) {
         return runEnvironmentAudit(argv[2]);
     }
     if (command == "env-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler env-repair <file> [--user]\\n"; return 2; }
         return runEnvironmentRepair(argv[2], argc >= 4 && std::string(argv[3]) == "--user");
     }
     if (command == "path-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler path-repair <baseline-file>\\n"; return 2; }
         return runPathRepair(argv[2]);
     }
     if (command == "protect") return runProtection();
     if (command == "uninstall") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 4) {
             std::cerr << "Usage: handler uninstall <python|node> <package> [--dry-run]\n";
             return 2;
@@ -829,6 +840,7 @@ int main(int argc, char* argv[]) {
         return runUninstall(argv[2], argv[3], argc >= 5 && std::string(argv[4]) == "--dry-run");
     }
     if (command == "toolchain-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\\n"; return 2; }
         return runToolchainRepair(argv[2]);
     }
@@ -855,6 +867,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 4) {
             std::cerr << "Usage: handler repair <python-module|node-module> <package>\n";
             return 2;
@@ -911,6 +924,7 @@ int main(int argc, char* argv[]) {
     if (command == "project") return runProject();
     if (command == "deps") return runDeps(argc, argv);
     if (command == "dependency-upgrade") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
         const auto context = currentProject();
         if (context.root.empty()) { std::cerr << "No supported project detected.\n"; return 1; }
