@@ -38,6 +38,7 @@ Audit scope:
 - Transaction artifact filenames now include a deterministic source-path digest, preventing same-named artifacts from different projects from overwriting one another.
 - Transaction artifacts now carry a content fingerprint; restore rejects same-size backup tampering and verifies the restored file fingerprint before reporting success.
 - Recovery journals now fail closed at transaction boundaries, track active action/verification stages, detect interrupted transactions, and block subsequent high-risk mutations until the interrupted state is reviewed.
+- Transactions now acquire an OS-backed exclusive lock under Handler transaction state, preventing concurrent Handler processes from mutating the same environment and journal simultaneously; the OS releases the lock if the process exits unexpectedly.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Second-pass audit status
@@ -54,10 +55,11 @@ The second pass found and fixed three additional Windows execution-boundary issu
 8. Unix command execution now honors and canonicalizes explicit executable paths, so project-local Python repairs cannot silently fall back to PATH/global Python.
 9. Cross-platform compiler warnings uncovered during CI were cleaned up, including ambiguous boolean precedence, unused security helpers, and platform-specific toolchain helpers.
 10. Regression coverage now explicitly rejects malformed dependency package names before any registry or install command is reached.
+11. Transaction concurrency is covered by an in-process lock contention regression test.
 
-The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation. The executable trust policy is also centralized so future trust-boundary changes cannot silently diverge between execution and discovery paths.
+The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation. Transaction concurrency is now serialized with a cross-platform OS-backed lock in the Handler transaction state directory. The executable trust policy is also centralized so future trust-boundary changes cannot silently diverge between execution and discovery paths.
 
-GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed for commit `466b87b5d01e5c4e3f5b0e7bdd930d70f5371493`. Subsequent Python-repair, transaction-integrity, and interrupted-transaction changes are pending their own CI verification.
+GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed for commit `466b87b5d01e5c4e3f5b0e7bdd930d70f5371493`. Subsequent Python-repair, transaction-integrity, interrupted-transaction, and transaction-lock changes are pending their own CI verification.
 
 ## Remaining bounded limitations
 
