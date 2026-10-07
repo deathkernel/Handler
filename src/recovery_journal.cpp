@@ -176,7 +176,7 @@ bool RecoveryJournal::hasCorruptEntries() const {
     return false;
 }
 bool RecoveryJournal::hasUnfinishedTransaction() const {
-    return !unfinishedTransactionIds().empty();
+    return hasCorruptEntries() || !unfinishedTransactionIds().empty();
 }
 
 } // namespace handler
