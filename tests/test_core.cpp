@@ -1,4 +1,5 @@
 #include "handler/command_engine.h"
+#include "handler/action_engine.h"
 #include "handler/dependency_graph.h"
 #include "handler/error_detection.h"
 #include "handler/policy.h"
@@ -76,6 +77,13 @@ int main() {
     assert(isAllowedExecutable("winget"));
     assert(classifyCommandRisk("winget", {"upgrade", "--id", "Git.Git"}) == RiskLevel::High);
 
+    const auto invalidExecutable = std::filesystem::temp_directory_path() / "handler-not-an-executable";
+    CommandSpec invalidCommand{
+        "invalid-explicit-path", "python", {"--version"}, RiskLevel::Low, 5000,
+        {}, invalidExecutable};
+    const auto invalidExecution = executeCommand(invalidCommand);
+    assert(!invalidExecution.started);
+
     Transaction rollbackTx(SafetyMode::Confirm);
     const auto rollbackOk = rollbackTx.runApproved(
         RiskLevel::Low,
@@ -103,6 +111,7 @@ int main() {
     const auto installRisk = classifyCommandRisk("npm", {"install", "express"});
     assert(installRisk == RiskLevel::High);
 
+    std::error_code ec;
     const auto invalidDependencyRoot =
         std::filesystem::temp_directory_path() / "handler-invalid-dependency-test";
     std::filesystem::remove_all(invalidDependencyRoot, ec);
@@ -159,14 +168,13 @@ int main() {
     assert(impact[0].affected.size() == 1);
 
     const auto tempRoot = std::filesystem::temp_directory_path() / "handler_snapshot_test";
-    std::error_code ec;
     std::filesystem::remove_all(tempRoot, ec);
     SnapshotStore snapshots(tempRoot);
     EnvironmentState state;
     state.timestampUtc = "test";
     state.computerName = "machine";
     state.userName = "user";
-    state.handlerVersion = "0.8.0";
+    state.handlerVersion = "0.9.0";
     const auto snapshot = snapshots.create(state);
     assert(snapshot.has_value());
     assert(snapshots.find(snapshot->id).has_value());
