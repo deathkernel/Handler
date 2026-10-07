@@ -40,6 +40,8 @@ Audit scope:
 - Recovery journals now fail closed at transaction boundaries, track active action/verification stages, detect interrupted transactions, and block subsequent high-risk mutations until the interrupted state is reviewed.
 - Transactions now acquire an OS-backed exclusive lock under Handler transaction state, preventing concurrent Handler processes from mutating the same environment and journal simultaneously; the OS releases the lock if the process exits unexpectedly.
 - Manual snapshot rollback now acquires the same transaction lock and records a terminal MANUAL_ROLLBACK stage; if journal persistence fails, the command fails closed instead of silently claiming recovery is complete.
+- Recovery journal entries now carry a transaction ID; active/terminal state is tracked per transaction, preventing an older transaction's terminal entry from clearing a newer transaction's interrupted state. Legacy three-field journal entries remain readable.
+- Manual rollback now closes the uniquely active transaction by ID and refuses to guess if the journal contains multiple active transaction identities.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Second-pass audit status
@@ -61,7 +63,7 @@ The second pass found and fixed three additional Windows execution-boundary issu
 
 The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation. Transaction concurrency is now serialized with a cross-platform OS-backed lock in the Handler transaction state directory. The executable trust policy is also centralized so future trust-boundary changes cannot silently diverge between execution and discovery paths.
 
-GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed for commit `466b87b5d01e5c4e3f5b0e7bdd930d70f5371493`. Subsequent Python-repair, transaction-integrity, interrupted-transaction, and transaction-lock changes are pending their own CI verification.
+GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed for commit `466b87b5d01e5c4e3f5b0e7bdd930d70f5371493`. Subsequent Python-repair, transaction-integrity, interrupted-transaction, transaction-lock, and transaction-identity changes are pending their own CI verification.
 
 ## Remaining bounded limitations
 
