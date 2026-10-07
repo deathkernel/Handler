@@ -369,7 +369,10 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
                     RiskLevel::High, 180000};
                 rollback.workingDirectory = projectRoot;
                 const auto r = executeCommand(rollback);
-                return r.started && r.exitCode == 0;
+                if (!r.started || r.exitCode != 0) return false;
+                return current.empty()
+                    ? installedDependencyVersion(ecosystem, package, projectRoot).empty()
+                    : installedDependencyVersion(ecosystem, package, projectRoot) == current;
             }
 
             if (current.empty()) {
