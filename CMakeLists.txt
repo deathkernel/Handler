@@ -24,6 +24,7 @@ add_executable(handler
     src/policy.cpp
     src/snapshot.cpp
     src/transaction.cpp
+    src/transaction_lock.cpp
     src/recovery_journal.cpp
     src/command_engine.cpp
     src/action_engine.cpp
@@ -83,6 +84,7 @@ add_executable(handler_tests
     src/state_paths.cpp
     src/system_info.cpp
     src/transaction.cpp
+    src/transaction_lock.cpp
     src/recovery_journal.cpp
     src/uninstall.cpp
 )
