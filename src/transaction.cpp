@@ -27,57 +27,57 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
         return {false, false, false, {}, "transaction blocked: another Handler transaction is already active"};
 
     RecoveryJournal journal(root / "recovery.log");
-    if (!journal.record("START", "transaction started"))
+    const auto transactionId = RecoveryJournal::newTransactionId();
+    if (!journal.record(transactionId, "START", "transaction started"))
         return {false, false, false, {}, "transaction aborted: recovery journal unavailable"};
 
     SnapshotStore snapshots(root / "snapshots");
     const auto snapshot = snapshots.create(captureEnvironmentState());
 
     if (snapshot) {
-        if (!journal.record("SNAPSHOT", snapshot->id))
+        if (!journal.record(transactionId, "SNAPSHOT", snapshot->id))
             return {false, false, true, snapshot->id, "transaction aborted: recovery journal could not record snapshot"};
     } else {
-        if (!journal.record("SNAPSHOT_FAILED", "environment snapshot could not be created"))
+        if (!journal.record(transactionId, "SNAPSHOT_FAILED", "environment snapshot could not be created"))
             return {false, false, false, {}, "transaction aborted: recovery journal unavailable"};
         if (risk != RiskLevel::Low) {
-            journal.record("ABORT", "transaction refused because a recovery snapshot was unavailable");
+            journal.record(transactionId, "ABORT", "transaction refused because a recovery snapshot was unavailable");
             return {false, false, false, {}, "transaction aborted: recovery snapshot unavailable"};
         }
     }
 
-    if (!journal.record("ACTION_BEGIN", "transaction action started"))
+    if (!journal.record(transactionId, "ACTION_BEGIN", "transaction action started"))
         return {false, false, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "transaction aborted: recovery journal unavailable before action"};
 
     const bool actionOk = action();
     if (!actionOk) {
         const bool rollbackOk = rollback ? rollback() : false;
-        journal.record("ROLLBACK", rollbackOk ? "action failed; rollback verified by callback" : "action failed; rollback failed or unavailable");
+        journal.record(transactionId, "ROLLBACK", rollbackOk ? "action failed; rollback verified by callback" : "action failed; rollback failed or unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{}, "action failed; rollback invoked"};
     }
 
-    if (!journal.record("VERIFY_BEGIN", "transaction verification started")) {
+    if (!journal.record(transactionId, "VERIFY_BEGIN", "transaction verification started")) {
         const bool rollbackOk = rollback ? rollback() : false;
-        journal.record("ROLLBACK", rollbackOk ? "journal failure; rollback verified by callback" : "journal failure; rollback failed or unavailable");
+        journal.record(transactionId, "ROLLBACK", rollbackOk ? "journal failure; rollback verified by callback" : "journal failure; rollback failed or unavailable");
         return {false, rollbackOk, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "verification aborted: recovery journal unavailable"};
     }
 
     const auto verification = verify();
     if (!verification.passed) {
         const bool rollbackOk = rollback ? rollback() : false;
-        journal.record("ROLLBACK", rollbackOk ? "verification failed; rollback verified by callback" : "verification failed; rollback failed or unavailable");
+        journal.record(transactionId, "ROLLBACK", rollbackOk ? "verification failed; rollback verified by callback" : "verification failed; rollback failed or unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{},
                 "verification failed; rollback invoked"};
     }
 
-    const bool commitRecorded = journal.record("COMMIT", "transaction verified");
+    const bool commitRecorded = journal.record(transactionId, "COMMIT", "transaction verified");
     return {true, false, snapshot.has_value(),
             snapshot ? snapshot->id : std::string{},
             commitRecorded ? "action verified and committed"
                            : "action verified and committed; recovery journal persistence failed"};
 }
-
 
 TransactionResult Transaction::runApproved(RiskLevel risk, const Action& action,
                                            const Verify& verify, const Rollback& rollback) {
