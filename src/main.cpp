@@ -646,7 +646,10 @@ int runRollback(const std::string& id) {
         return 1;
     }
     handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
-    journal.record("MANUAL_ROLLBACK", id);
+    if (!journal.record("MANUAL_ROLLBACK", id)) {
+        std::cerr << "Rollback applied, but recovery journal could not be updated; retry recovery review before further mutations.\n";
+        return 1;
+    }
     makeHistory().record("ROLLBACK_APPLIED",
                          id + " | Handler baseline restored");
     std::cout << "Handler baseline restored from snapshot " << id << ".\n";
