@@ -171,6 +171,9 @@ int main() {
     assert(journalTest.record("COMMIT", "test"));
     assert(!journalTest.hasUnfinishedTransaction());
     assert(journalTest.record("START", "test"));
+    assert(journalTest.record("MANUAL_ROLLBACK", "test"));
+    assert(!journalTest.hasUnfinishedTransaction());
+    assert(journalTest.record("START", "test"));
     assert(journalTest.record("ROLLBACK", "test"));
     assert(!journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
