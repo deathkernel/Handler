@@ -17,6 +17,7 @@
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
 #include "handler/uninstall.h"
+#include "handler/repair.h"
 
 #include <cassert>
 #include <iostream>
@@ -160,6 +161,30 @@ int main() {
     assert(upgradeDependency(invalidDependencyRoot, "Node.js", "bad;package", ">=1.0") == 3);
     assert(upgradeDependency(invalidDependencyRoot, "Unknown", "package", ">=1.0") == 3);
     std::filesystem::remove_all(invalidDependencyRoot, ec);
+
+    const auto fakeVirtualEnv =
+        std::filesystem::temp_directory_path() / "handler-untrusted-virtualenv";
+    std::filesystem::remove_all(fakeVirtualEnv, ec);
+#ifdef _WIN32
+    std::filesystem::create_directories(fakeVirtualEnv / "Scripts", ec);
+    { std::ofstream out(fakeVirtualEnv / "Scripts" / "python.exe"); out << "fake"; }
+    const char* oldVirtualEnvRaw = std::getenv("VIRTUAL_ENV");
+    const std::string oldVirtualEnv = oldVirtualEnvRaw ? oldVirtualEnvRaw : "";
+    _putenv_s("VIRTUAL_ENV", fakeVirtualEnv.string().c_str());
+#else
+    std::filesystem::create_directories(fakeVirtualEnv / "bin", ec);
+    { std::ofstream out(fakeVirtualEnv / "bin" / "python"); out << "fake"; }
+    const char* oldVirtualEnvRaw = std::getenv("VIRTUAL_ENV");
+    const std::string oldVirtualEnv = oldVirtualEnvRaw ? oldVirtualEnvRaw : "";
+    setenv("VIRTUAL_ENV", fakeVirtualEnv.string().c_str(), 1);
+#endif
+    assert(repairPythonModule("handler-test-package") == 3);
+#ifdef _WIN32
+    _putenv_s("VIRTUAL_ENV", oldVirtualEnv.c_str());
+#else
+    setenv("VIRTUAL_ENV", oldVirtualEnv.c_str(), 1);
+#endif
+    std::filesystem::remove_all(fakeVirtualEnv, ec);
 
     const auto errors = detectErrors("ModuleNotFoundError: No module named 'requests'");
     assert(!errors.empty());
