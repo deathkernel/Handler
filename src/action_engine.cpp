@@ -268,13 +268,13 @@ ActionResult executeCommand(const CommandSpec& command) {
     std::wstring commandLine;
     if (useCommandInterpreter) {
         commandLine = quoteWideArgument(executablePath);
-        commandLine += L" /d /c \\\"";
+        commandLine += L" /d /s /c \"";
         commandLine += quoteWideArgument(batchExecutable);
         for (const auto& argument : command.arguments) {
             commandLine.push_back(L' ');
             commandLine += quoteWideArgument(toWide(argument));
         }
-        commandLine += L"\\\"";
+        commandLine += L"\"";
     } else {
         commandLine = buildWideCommandLine(command);
     }
