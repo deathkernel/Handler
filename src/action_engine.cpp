@@ -6,6 +6,8 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <algorithm>
+#include <cwctype>
 #ifndef _WIN32
 #include <sys/types.h>
 #include <cerrno>
@@ -81,6 +83,55 @@ std::wstring quoteWideArgument(const std::wstring& value) {
     return out;
 }
 
+bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& root) {
+    std::error_code ec;
+    const auto c = std::filesystem::weakly_canonical(child, ec);
+    if (ec) return false;
+    ec.clear();
+    const auto r = std::filesystem::weakly_canonical(root, ec);
+    if (ec) return false;
+    auto ci = c.begin();
+    auto ri = r.begin();
+    for (; ri != r.end() && ci != c.end(); ++ri, ++ci) {
+        if (_wcsicmp(ri->wstring().c_str(), ci->wstring().c_str()) != 0)
+            return false;
+    }
+    return ri == r.end();
+}
+
+bool trustedWindowsExecutable(const std::filesystem::path& path) {
+    std::error_code ec;
+    const auto canonical = std::filesystem::weakly_canonical(path, ec);
+    if (ec || canonical.empty() || !std::filesystem::is_regular_file(canonical, ec))
+        return false;
+
+    const auto current = std::filesystem::weakly_canonical(std::filesystem::current_path(), ec);
+    if (!ec && pathUnder(canonical, current))
+        return false;
+
+    const auto programFiles = std::getenv("ProgramFiles");
+    const auto programFiles86 = std::getenv("ProgramFiles(x86)");
+    const auto localAppData = std::getenv("LOCALAPPDATA");
+    const auto windowsRoot = std::getenv("WINDIR");
+
+    std::vector<std::filesystem::path> roots;
+    if (programFiles && *programFiles) roots.emplace_back(programFiles);
+    if (programFiles86 && *programFiles86) roots.emplace_back(programFiles86);
+    if (localAppData && *localAppData) {
+        roots.emplace_back(std::filesystem::path(localAppData) / "Programs");
+        roots.emplace_back(std::filesystem::path(localAppData) / "Microsoft" / "WindowsApps");
+    }
+    if (windowsRoot && *windowsRoot) {
+        roots.emplace_back(std::filesystem::path(windowsRoot) / "System32");
+        roots.emplace_back(std::filesystem::path(windowsRoot) / "SysWOW64");
+    }
+
+    for (const auto& root : roots)
+        if (pathUnder(canonical, root))
+            return true;
+    return false;
+}
+
 std::wstring buildWideCommandLine(const CommandSpec& command) {
     std::wstring line = quoteWideArgument(toWide(command.executable));
     for (const auto& argument : command.arguments) {
@@ -111,7 +162,19 @@ ActionResult executeCommand(const CommandSpec& command) {
                 ? (filename == "python.exe")
                 : (command.executable == "node" || command.executable == "node.exe")
                     ? (filename == "node.exe")
-                    : false;
+                    : (command.executable == "git")
+                        ? (filename == "git.exe")
+                        : (command.executable == "cmake")
+                            ? (filename == "cmake.exe")
+                            : (command.executable == "dotnet" || command.executable == "dotnet.exe")
+                                ? (filename == "dotnet.exe")
+                                : (command.executable == "npm" || command.executable == "npm.cmd")
+                                    ? (filename == "npm.cmd" || filename == "npm.exe")
+                                    : (command.executable == "winget" || command.executable == "winget.exe")
+                                        ? (filename == "winget.exe")
+                                        : (command.executable == "where")
+                                            ? (filename == "where.exe")
+                                            : false;
         if (!validPath)
             return {false, -1, {}, "configured executable path does not match the allowlisted tool"};
 
@@ -127,6 +190,8 @@ ActionResult executeCommand(const CommandSpec& command) {
             return {false, -1, {}, "allowlisted executable was not found on PATH"};
 
         executablePath = std::filesystem::path(resolved);
+        if (!trustedWindowsExecutable(executablePath))
+            return {false, -1, {}, "resolved executable is outside Handler trusted installation roots"};
     }
 
     if (!command.workingDirectory.empty()) {
