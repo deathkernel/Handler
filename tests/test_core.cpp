@@ -335,6 +335,17 @@ int main() {
     assert(!snapshots.find("../outside").has_value());
     SnapshotInfo traversal{"../outside", tempRoot / ".." / "outside.state"};
     assert(!snapshots.load(traversal).has_value());
+    {
+        std::ofstream corruptSnapshot(snapshot->path, std::ios::trunc);
+        corruptSnapshot << "timestamp_utc=test\n"
+                        << "computer_name=machine\n"
+                        << "user_name=user\n"
+                        << "temp_path=/tmp\n"
+                        << "path=/usr/bin\n"
+                        << "current_directory=/workspace\n"
+                        << "unknown_field=value\n";
+    }
+    assert(!snapshots.load(*snapshot).has_value());
     std::filesystem::remove_all(tempRoot, ec);
 
     const auto testStateRoot = handlerTransactionRoot() / "tests";
