@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <vector>
 #include "handler/state_paths.h"
+#include "handler/executable_trust.h"
 #ifndef _WIN32
 #include <sys/types.h>
 #include <cerrno>
@@ -86,55 +87,6 @@ std::wstring quoteWideArgument(const std::wstring& value) {
     return out;
 }
 
-bool pathUnder(const std::filesystem::path& child, const std::filesystem::path& root) {
-    std::error_code ec;
-    const auto c = std::filesystem::weakly_canonical(child, ec);
-    if (ec) return false;
-    ec.clear();
-    const auto r = std::filesystem::weakly_canonical(root, ec);
-    if (ec) return false;
-    auto ci = c.begin();
-    auto ri = r.begin();
-    for (; ri != r.end() && ci != c.end(); ++ri, ++ci) {
-        if (_wcsicmp(ri->wstring().c_str(), ci->wstring().c_str()) != 0)
-            return false;
-    }
-    return ri == r.end();
-}
-
-bool trustedWindowsExecutable(const std::filesystem::path& path) {
-    std::error_code ec;
-    const auto canonical = std::filesystem::weakly_canonical(path, ec);
-    if (ec || canonical.empty() || !std::filesystem::is_regular_file(canonical, ec))
-        return false;
-
-    const auto current = std::filesystem::weakly_canonical(std::filesystem::current_path(), ec);
-    if (!ec && pathUnder(canonical, current))
-        return false;
-
-    const auto programFiles = std::getenv("ProgramFiles");
-    const auto programFiles86 = std::getenv("ProgramFiles(x86)");
-    const auto localAppData = std::getenv("LOCALAPPDATA");
-    const auto windowsRoot = std::getenv("WINDIR");
-
-    std::vector<std::filesystem::path> roots;
-    if (programFiles && *programFiles) roots.emplace_back(programFiles);
-    if (programFiles86 && *programFiles86) roots.emplace_back(programFiles86);
-    if (localAppData && *localAppData) {
-        roots.emplace_back(std::filesystem::path(localAppData) / "Programs");
-        roots.emplace_back(std::filesystem::path(localAppData) / "Microsoft" / "WindowsApps");
-    }
-    if (windowsRoot && *windowsRoot) {
-        roots.emplace_back(std::filesystem::path(windowsRoot) / "System32");
-        roots.emplace_back(std::filesystem::path(windowsRoot) / "SysWOW64");
-    }
-
-    for (const auto& root : roots)
-        if (pathUnder(canonical, root))
-            return true;
-    return false;
-}
-
 std::wstring buildWideCommandLine(const CommandSpec& command) {
     std::wstring line = quoteWideArgument(toWide(command.executable));
     for (const auto& argument : command.arguments) {
@@ -188,7 +140,7 @@ ActionResult executeCommand(const CommandSpec& command) {
         if (trustEc)
             return {false, -1, {}, "configured executable path could not be canonicalized"};
 
-        bool trusted = trustedWindowsExecutable(canonical);
+        bool trusted = isTrustedExecutablePath(canonical);
         if (!trusted && isHandlerStatePath(canonical))
             trusted = true;
         if (!trusted &&
@@ -210,7 +162,7 @@ ActionResult executeCommand(const CommandSpec& command) {
             if (!windir || !*windir)
                 return {false, -1, {}, "WINDIR is unavailable for npm command interpreter"};
             executablePath = std::filesystem::path(windir) / "System32" / "cmd.exe";
-            if (!trustedWindowsExecutable(executablePath))
+            if (!isTrustedExecutablePath(executablePath))
                 return {false, -1, {}, "trusted command interpreter was not found"};
         }
     } else {
