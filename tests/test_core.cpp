@@ -173,6 +173,8 @@ int main() {
     assert(identityJournal.hasUnfinishedTransaction());
     const auto activeAfterA = identityJournal.unfinishedTransactionIds();
     assert(activeAfterA.size() == 1 && activeAfterA.front() == transactionB);
+    assert(identityJournal.record(transactionB, "RECOVERY_REQUIRED", "B"));
+    assert(identityJournal.hasUnfinishedTransaction());
     assert(identityJournal.record(transactionB, "MANUAL_ROLLBACK", "B"));
     assert(!identityJournal.hasUnfinishedTransaction());
 
