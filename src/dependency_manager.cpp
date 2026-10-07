@@ -359,7 +359,7 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
             if (!restored || ecosystem != "Node.js") return restored;
 
-            const lockfile = projectRoot / "package-lock.json";
+            const std::filesystem::path lockfile = projectRoot / "package-lock.json";
             const bool hasLockfile = std::filesystem::is_regular_file(lockfile);
             CommandSpec rollback{"dependency-upgrade-rollback", "npm",
                 hasLockfile
