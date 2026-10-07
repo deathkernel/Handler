@@ -207,6 +207,13 @@ int main() {
     assert(journalTest.record("START", "test"));
     assert(journalTest.record("MANUAL_ROLLBACK", "test"));
     assert(!journalTest.hasUnfinishedTransaction());
+    assert(!journalTest.record("UNKNOWN_STAGE", "test"));
+    {
+        std::ofstream unknown(journalTestFile, std::ios::app);
+        unknown << "2026-10-07T00:00:00Z | UNKNOWN_STAGE | injected\\n";
+    }
+    assert(journalTest.hasCorruptEntries());
+    assert(journalTest.hasUnfinishedTransaction());
     assert(journalTest.record("START", "test"));
     assert(journalTest.record("ROLLBACK", "test"));
     assert(!journalTest.hasUnfinishedTransaction());
