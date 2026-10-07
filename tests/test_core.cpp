@@ -14,6 +14,7 @@
 #include "handler/state_paths.h"
 #include "handler/transaction.h"
 #include "handler/recovery_journal.h"
+#include "handler/transaction_lock.h"
 
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
@@ -144,6 +145,21 @@ int main() {
         {}, invalidExecutable};
     const auto invalidExecution = executeCommand(invalidCommand);
     assert(!invalidExecution.started);
+
+    const auto lockTestFile = std::filesystem::temp_directory_path() / "handler-transaction-lock-test.lock";
+    std::filesystem::remove(lockTestFile, testEc);
+    {
+        TransactionLock firstLock(lockTestFile);
+        TransactionLock secondLock(lockTestFile);
+        assert(firstLock.acquire());
+        assert(firstLock.held());
+        assert(!secondLock.acquire());
+        firstLock.release();
+        assert(!firstLock.held());
+        assert(secondLock.acquire());
+        assert(secondLock.held());
+    }
+    std::filesystem::remove(lockTestFile, testEc);
 
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
     std::filesystem::remove(journalTestFile, testEc);
