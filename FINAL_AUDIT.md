@@ -53,9 +53,9 @@ The second pass found and fixed three additional Windows execution-boundary issu
 9. Cross-platform compiler warnings uncovered during CI were cleaned up, including ambiguous boolean precedence, unused security helpers, and platform-specific toolchain helpers.
 10. Regression coverage now explicitly rejects malformed dependency package names before any registry or install command is reached.
 
-The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation.
+The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation. The executable trust policy is also centralized so future trust-boundary changes cannot silently diverge between execution and discovery paths.
 
-GitHub Actions run #524 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed. This CI result is the authoritative post-fix build gate.
+GitHub Actions run #524 completed successfully on Ubuntu, Windows, and macOS; all three build and core-test jobs passed. A newer CI run is in progress for the latest executable-trust centralization changes and must pass before those changes are considered fully verified.
 
 ## Remaining bounded limitations
 
@@ -68,7 +68,7 @@ GitHub Actions run #524 completed successfully on Ubuntu, Windows, and macOS; al
 
 ## Audit conclusion
 
-The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The final CI run #524 is green across all three supported CI operating systems.
+The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The previously verified CI run #524 is green across all three supported CI operating systems; the latest trust-policy centralization change remains gated on its newer CI run.
 
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
 
