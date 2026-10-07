@@ -1,6 +1,7 @@
 #include "handler/recovery_journal.h"
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <fstream>
