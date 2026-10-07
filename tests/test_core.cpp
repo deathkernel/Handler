@@ -187,6 +187,12 @@ int main() {
     assert(identityJournal.unfinishedTransactionIds().front().empty());
     assert(identityJournal.record("ROLLBACK", "legacy"));
     assert(!identityJournal.hasUnfinishedTransaction());
+    {
+        std::ofstream corrupt(journalIdentityFile, std::ios::app);
+        corrupt << "corrupt journal record without delimiters\\n";
+    }
+    assert(identityJournal.hasCorruptEntries());
+    assert(identityJournal.hasUnfinishedTransaction());
     std::filesystem::remove(journalIdentityFile, testEc);
 
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
