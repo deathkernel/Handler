@@ -189,10 +189,16 @@ ActionResult executeCommand(const CommandSpec& command) {
             return {false, -1, {}, "configured executable path could not be canonicalized"};
 
         bool trusted = trustedWindowsExecutable(canonical);
-        if (!trusted && !command.workingDirectory.empty())
-            trusted = pathUnder(canonical, command.workingDirectory);
         if (!trusted && isHandlerStatePath(canonical))
             trusted = true;
+        if (!trusted &&
+            (command.executable == "python" || command.executable == "python.exe") &&
+            canonical.filename() == std::filesystem::path("python.exe")) {
+            const auto scripts = canonical.parent_path();
+            const auto environment = scripts.parent_path().filename().string();
+            trusted = scripts.filename() == std::filesystem::path("Scripts") &&
+                      (environment == ".venv" || environment == "venv");
+        }
         if (!trusted)
             return {false, -1, {}, "configured executable path is outside Handler trusted roots"};
 
