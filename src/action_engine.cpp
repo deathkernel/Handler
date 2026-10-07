@@ -399,10 +399,8 @@ std::string shellQuote(const std::string& value) {
     return out;
 }
 
-std::string buildShellCommand(const CommandSpec& command) {
-    const std::string executable = command.executablePath.empty()
-        ? command.executable
-        : command.executablePath.string();
+std::string buildShellCommand(const CommandSpec& command,
+                              const std::string& executable) {
     std::string line = shellQuote(executable);
     for (const auto& arg : command.arguments)
         line += " " + shellQuote(arg);
@@ -414,11 +412,13 @@ ActionResult executeCommand(const CommandSpec& command) {
     if (!isAllowedExecutable(command.executable))
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
 
+    std::string executablePath = command.executable;
     if (!command.executablePath.empty()) {
         std::error_code ec;
         const auto canonical = std::filesystem::weakly_canonical(command.executablePath, ec);
         if (ec || !std::filesystem::is_regular_file(canonical, ec))
             return {false, -1, {}, "configured executable path does not exist"};
+        executablePath = canonical.string();
     }
 
     if (!command.workingDirectory.empty()) {
@@ -447,7 +447,7 @@ ActionResult executeCommand(const CommandSpec& command) {
         dup2(outputPipe[1], STDERR_FILENO);
         close(outputPipe[1]);
 
-        const std::string line = buildShellCommand(command);
+        const std::string line = buildShellCommand(command, executablePath);
         execl("/bin/sh", "sh", "-c", line.c_str(), static_cast<char*>(nullptr));
         _exit(127);
     }
