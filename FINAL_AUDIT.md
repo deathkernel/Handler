@@ -105,3 +105,9 @@ The repository is release-oriented within its documented scope, but the limitati
 - Recovery journal writers now reject unknown stage names instead of persisting records that the recovery state machine cannot interpret.
 - Recovery journal parsing now treats unknown-but-well-formed stages as corruption and fails closed.
 - Added regression coverage for both rejected unknown-stage writes and injected unknown-stage records.
+
+
+## Latest state-version correctness hardening
+
+- Environment-state capture now reports Handler 0.9.0 instead of the stale 0.8.0 value.
+- Added regression coverage so future release-version changes cannot silently leave captured state metadata stale.
