@@ -27,6 +27,7 @@ add_executable(handler
     src/recovery_journal.cpp
     src/command_engine.cpp
     src/action_engine.cpp
+    src/executable_trust.cpp
     src/state_paths.cpp
     src/decision_engine.cpp
     src/recovery.cpp
@@ -76,6 +77,7 @@ add_executable(handler_tests
     src/toolchain_doctor.cpp
     src/component_discovery.cpp
     src/action_engine.cpp
+    src/executable_trust.cpp
     src/history.cpp
     src/artifact_backup.cpp
     src/state_paths.cpp
