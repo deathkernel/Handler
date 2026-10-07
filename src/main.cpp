@@ -24,6 +24,7 @@
 #include "handler/recovery_journal.h"
 #include "handler/snapshot.h"
 #include "handler/transaction.h"
+#include "handler/transaction_lock.h"
 #include "handler/verification.h"
 #include "handler/router.h"
 #include "handler/state_store.h"
@@ -634,6 +635,12 @@ int runRollback(const std::string& id) {
         return 0;
     }
 
+    handler::TransactionLock recoveryLock(transactionRoot() / "transaction.lock");
+    if (!recoveryLock.acquire()) {
+        std::cerr << "Rollback blocked: another Handler transaction is active.\n";
+        return 1;
+    }
+
     if (!makeStateStore().saveCurrent(*state)) {
         std::cerr << "Rollback failed: could not restore saved Handler state.\n";
         return 1;
@@ -844,7 +851,10 @@ int main(int argc, char* argv[]) {
         if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\\n"; return 2; }
         return runToolchainRepair(argv[2]);
     }
-    if (command == "doctor-repair") return runDoctorRepair();
+    if (command == "doctor-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
+        return runDoctorRepair();
+    }
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
     if (command == "risk") {
@@ -859,6 +869,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "recover") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) {
             std::cerr << "Usage: handler recover <error text>\n";
             return 2;
@@ -922,7 +933,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "project") return runProject();
-    if (command == "deps") return runDeps(argc, argv);
+    if (command == "deps") {
+        if (argc >= 4 && std::string(argv[2]) == "--upgrade" && mutationBlockedByInterruptedTransaction()) return 1;
+        return runDeps(argc, argv);
+    }
     if (command == "dependency-upgrade") {
         if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
