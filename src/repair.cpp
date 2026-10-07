@@ -230,13 +230,19 @@ int repairNodeModule(const char* rawPackage) {
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            if (wasInstalled) return restored;
+            if (!restored) return false;
+
+            const bool hasLockfile = std::filesystem::is_regular_file(
+                projectRoot / "package-lock.json");
             CommandSpec rollback{"node-repair-rollback", "npm",
-                {"uninstall", package, "--no-audit", "--no-fund"},
-                RiskLevel::High, 120000};
+                hasLockfile
+                    ? std::vector<std::string>{"ci", "--ignore-scripts", "--no-audit", "--no-fund"}
+                    : std::vector<std::string>{"install", "--ignore-scripts", "--no-audit", "--no-fund"},
+                RiskLevel::High, 180000};
             rollback.workingDirectory = projectRoot;
             const auto result = executeCommand(rollback);
-            return restored && result.started && result.exitCode == 0;
+            if (!result.started || result.exitCode != 0) return false;
+            return true;
         });
 
     History history(repairStateRoot() / "history.log");
