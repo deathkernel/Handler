@@ -20,17 +20,6 @@ bool present(const std::string& name) {
     const char* v = std::getenv(name.c_str());
     return v != nullptr;
 }
-bool nameEquals(const std::string& a, const std::string& b) {
-#ifdef _WIN32
-    if (a.size() != b.size()) return false;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) return false;
-    return true;
-#else
-    return a == b;
-#endif
-}
 bool trustedBaseline(const std::filesystem::path& file) {
     return isHandlerStatePath(file);
 }
