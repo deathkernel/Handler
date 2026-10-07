@@ -83,6 +83,8 @@ std::string installedPythonPackageVersion(const std::filesystem::path& pythonPat
     const auto last = version.find_last_not_of(" \t");
     if (first == std::string::npos) return {};
     return version.substr(first, last - first + 1);
+}
+
 std::string installedNodePackageVersion(const std::filesystem::path& projectRoot,
                                         const std::string& package) {
     CommandSpec query{"node-repair-precheck", "npm",
@@ -91,16 +93,20 @@ std::string installedNodePackageVersion(const std::filesystem::path& projectRoot
     query.workingDirectory = projectRoot;
     const auto result = executeCommand(query);
     if (!result.started || result.exitCode != 0) return {};
-    const std::string marker = ""version":";
-    const auto pos = result.output.find(marker);
-    if (pos == std::string::npos) return {};
-    const auto begin = result.output.find('"', pos + marker.size());
+
+    const std::string dependencyKey = "\"" + package + "\"";
+    const auto dependencyPos = result.output.find(dependencyKey);
+    if (dependencyPos == std::string::npos) return {};
+
+    const auto versionKey = result.output.find("\"version\"", dependencyPos + dependencyKey.size());
+    if (versionKey == std::string::npos) return {};
+    const auto colon = result.output.find(':', versionKey);
+    if (colon == std::string::npos) return {};
+    const auto begin = result.output.find('"', colon + 1);
     if (begin == std::string::npos) return {};
     const auto endQuote = result.output.find('"', begin + 1);
     if (endQuote == std::string::npos) return {};
     return result.output.substr(begin + 1, endQuote - begin - 1);
-}
-
 }
 
 } // namespace
@@ -140,7 +146,12 @@ int repairPythonModule(const char* rawPackage) {
     for (const auto& file : {std::filesystem::path("requirements.txt"),
                              std::filesystem::path("pyproject.toml")}) {
         const auto backup = backupArtifact(file, artifactRoot / "python");
-        if (backup) backups.push_back(*backup);
+        if (!backup) {
+            std::cerr << "Python repair blocked: transaction artifact backup failed for "
+                      << file << ".\n";
+            return 1;
+        }
+        backups.push_back(*backup);
     }
     const auto result = tx.runApproved(
         RiskLevel::High,
@@ -239,7 +250,12 @@ int repairNodeModule(const char* rawPackage) {
     std::vector<ArtifactBackup> backups;
     for (const auto& file : {projectRoot / "package.json", projectRoot / "package-lock.json"}) {
         const auto backup = backupArtifact(file, artifactRoot / "node");
-        if (backup) backups.push_back(*backup);
+        if (!backup) {
+            std::cerr << "Node repair blocked: transaction artifact backup failed for "
+                      << file << ".\n";
+            return 1;
+        }
+        backups.push_back(*backup);
     }
     const auto result = tx.runApproved(
         RiskLevel::High,
