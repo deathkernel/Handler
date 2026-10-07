@@ -214,6 +214,10 @@ int main() {
     assert(doctor[1].status == "MISSING");
     const auto candidates = proposeToolchainRepairs(doctor);
     assert(candidates.size() == 2);
+    assert(candidates[0].tool == "python");
+    assert(candidates[0].supported);
+    assert(candidates[1].tool == "definitely-not-a-handler-tool");
+    assert(!candidates[1].supported);
     std::string repairDetails;
     assert(!repairToolchain("java", repairDetails));
     assert(!repairDetails.empty());
