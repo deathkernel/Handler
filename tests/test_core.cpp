@@ -1,5 +1,6 @@
 #include "handler/command_engine.h"
 #include "handler/action_engine.h"
+#include "handler/executable_trust.h"
 #include "handler/dependency_graph.h"
 #include "handler/error_detection.h"
 #include "handler/policy.h"
@@ -65,6 +66,18 @@ int main() {
         assert(!component.path.empty());
         assert(std::filesystem::is_regular_file(component.path));
     }
+
+    const auto trustRoot = std::filesystem::current_path() / ".handler-trust-boundary";
+    std::filesystem::remove_all(trustRoot, testEc);
+    std::filesystem::create_directories(trustRoot / "nested", testEc);
+    assert(!testEc);
+    const auto trustFile = trustRoot / "tool.exe";
+    { std::ofstream out(trustFile); out << "fake"; }
+    assert(pathUnder(trustFile, trustRoot));
+    assert(pathUnder(trustRoot / "nested", trustRoot));
+    assert(!pathUnder(trustRoot, trustRoot / "nested"));
+    assert(!isTrustedExecutablePath(trustFile));
+    std::filesystem::remove_all(trustRoot, testEc);
 
     const auto discoveryRoot = std::filesystem::current_path() / ".handler-discovery-boundary";
     std::filesystem::remove_all(discoveryRoot, testEc);
