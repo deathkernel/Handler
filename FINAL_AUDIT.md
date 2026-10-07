@@ -45,6 +45,8 @@ The second pass found and fixed three additional Windows execution-boundary issu
 1. Generic workingDirectory executable trust was narrowed so a project cannot simply place a fake python.exe in an arbitrary directory and have Handler execute it.
 2. Windows .cmd execution was corrected for npm; CreateProcessW does not directly execute batch files, so npm is launched through the trusted system command interpreter.
 3. Child-process handle inheritance was narrowed to the output pipe instead of inheriting every inheritable handle in the Handler process.
+4. Windows process containment now fails closed if the Job Object cannot be created, configured, or assigned; Handler no longer proceeds with an uncontained child process.
+5. Automated Node.js dependency repair/upgrade uses npm `--ignore-scripts` so package lifecycle scripts are not executed implicitly by Handler.
 
 The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation.
 
@@ -55,6 +57,7 @@ A local build could not be executed in this audit environment because outbound G
 - Toolchain package-manager rollback is intentionally not implemented; Handler retains the recovery snapshot and reports that package downgrade was not attempted.
 - Linux/macOS automatic toolchain package repair remains disabled.
 - Dependency solving is intentionally lightweight and is not a full lockfile SAT/resolution engine.
+- Automated npm repair/upgrade intentionally skips package lifecycle scripts; projects that require install scripts need an explicit package-manager workflow outside this automated repair path.
 - Deep cleanup code exists as a low-level foundation but is not exposed as a CLI capability.
 - CLI integration coverage is smaller than unit-level coverage; CI validates build + core test executable on all three supported CI operating systems.
 
