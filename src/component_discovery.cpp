@@ -92,6 +92,9 @@ std::string commandPath(const std::string& name) {
     if (!rawPath) return {};
 
     const std::string pathValue(rawPath);
+    std::error_code currentEc;
+    const auto currentRoot = std::filesystem::weakly_canonical(
+        std::filesystem::current_path(), currentEc);
     std::size_t begin = 0;
     while (begin <= pathValue.size()) {
         const auto end = pathValue.find(':', begin);
@@ -100,9 +103,12 @@ std::string commandPath(const std::string& name) {
         if (!entry.empty()) {
             const auto candidate = std::filesystem::path(entry) / name;
             std::error_code ec;
-            if (std::filesystem::is_regular_file(candidate, ec) &&
+            const auto canonical = std::filesystem::weakly_canonical(candidate, ec);
+            if (!ec && std::filesystem::is_regular_file(canonical, ec) &&
                 (ec.value() == 0)) {
-                return std::filesystem::weakly_canonical(candidate, ec).string();
+                if (!currentEc && pathUnder(canonical, currentRoot))
+                    return {};
+                return canonical.string();
             }
         }
         if (end == std::string::npos) break;
