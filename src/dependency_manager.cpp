@@ -344,11 +344,23 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
     std::vector<ArtifactBackup> backups;
     if (ecosystem == "Python") {
         for (const auto& file : {projectRoot/"requirements.txt", projectRoot/"pyproject.toml"}) {
-            if (auto b = backupArtifact(file, artifactRoot/"python")) backups.push_back(*b);
+            const auto backup = backupArtifact(file, artifactRoot/"python");
+            if (!backup) {
+                std::cerr << "Dependency upgrade blocked: transaction artifact backup failed for "
+                          << file << ".\n";
+                return 1;
+            }
+            backups.push_back(*backup);
         }
     } else {
         for (const auto& file : {projectRoot/"package.json", projectRoot/"package-lock.json"}) {
-            if (auto b = backupArtifact(file, artifactRoot/"node")) backups.push_back(*b);
+            const auto backup = backupArtifact(file, artifactRoot/"node");
+            if (!backup) {
+                std::cerr << "Dependency upgrade blocked: transaction artifact backup failed for "
+                          << file << ".\n";
+                return 1;
+            }
+            backups.push_back(*backup);
         }
     }
 
