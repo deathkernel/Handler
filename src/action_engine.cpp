@@ -400,7 +400,10 @@ std::string shellQuote(const std::string& value) {
 }
 
 std::string buildShellCommand(const CommandSpec& command) {
-    std::string line = shellQuote(command.executable);
+    const std::string executable = command.executablePath.empty()
+        ? command.executable
+        : command.executablePath.string();
+    std::string line = shellQuote(executable);
     for (const auto& arg : command.arguments)
         line += " " + shellQuote(arg);
     return line;
@@ -410,6 +413,14 @@ std::string buildShellCommand(const CommandSpec& command) {
 ActionResult executeCommand(const CommandSpec& command) {
     if (!isAllowedExecutable(command.executable))
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
+
+    if (!command.executablePath.empty()) {
+        std::error_code ec;
+        const auto canonical = std::filesystem::weakly_canonical(command.executablePath, ec);
+        if (ec || !std::filesystem::is_regular_file(canonical, ec))
+            return {false, -1, {}, "configured executable path does not exist"};
+        command.executablePath = canonical;
+    }
 
     if (!command.workingDirectory.empty()) {
         std::error_code ec;
