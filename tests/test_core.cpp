@@ -168,18 +168,20 @@ int main() {
     assert(!snapshots.load(traversal).has_value());
     std::filesystem::remove_all(tempRoot, ec);
 
-    const auto pathRoot = std::filesystem::temp_directory_path() / "handler_path_test";
-    std::filesystem::remove_all(pathRoot, ec);
-    const auto baseline = pathRoot / "path.baseline";
-    assert(savePathBaseline(baseline));
+    const auto testStateRoot = handlerTransactionRoot() / "tests";
+    std::filesystem::create_directories(testStateRoot, ec);
+    const auto pathBaseline = testStateRoot / "path.baseline";
+    assert(isHandlerStatePath(pathBaseline));
+    assert(savePathBaseline(pathBaseline));
     std::vector<std::string> loaded;
-    assert(loadPathBaseline(baseline, loaded));
+    assert(loadPathBaseline(pathBaseline, loaded));
     assert(!loaded.empty());
-    std::filesystem::remove_all(pathRoot, ec);
 
-    const auto envRoot = std::filesystem::temp_directory_path() / "handler_env_test";
-    std::filesystem::remove_all(envRoot, ec);
-    const auto envFile = envRoot / "environment.baseline";
+    const auto outsideBaseline = std::filesystem::temp_directory_path() / "handler-untrusted.baseline";
+    assert(!isHandlerStatePath(outsideBaseline));
+    assert(!loadPathBaseline(outsideBaseline, loaded));
+
+    const auto envFile = testStateRoot / "environment.baseline";
 #ifdef _WIN32
     assert(saveEnvironmentBaseline(envFile, {"PATH", "TEMP"}));
 #else
@@ -192,7 +194,7 @@ int main() {
     assert(envDiff.missing.empty());
     assert(isSensitiveVariable("API_TOKEN"));
     assert(isSensitiveVariable("NORMAL_VALUE") == false);
-    std::filesystem::remove_all(envRoot, ec);
+    std::filesystem::remove_all(testStateRoot, ec);
 
     const auto doctor = inspectToolchain({"python", "definitely-not-a-handler-tool"});
     assert(doctor.size() == 2);
