@@ -360,7 +360,18 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            return restored;
+            if (!restored || ecosystem != "Node.js") return restored;
+
+            const lockfile = projectRoot / "package-lock.json";
+            const bool hasLockfile = std::filesystem::is_regular_file(lockfile);
+            CommandSpec rollback{"dependency-upgrade-rollback", "npm",
+                hasLockfile
+                    ? std::vector<std::string>{"ci", "--ignore-scripts", "--no-audit", "--no-fund"}
+                    : std::vector<std::string>{"install", "--ignore-scripts", "--no-audit", "--no-fund"},
+                RiskLevel::High, 180000};
+            rollback.workingDirectory = projectRoot;
+            const auto r = executeCommand(rollback);
+            return r.started && r.exitCode == 0;
         });
 
     History history(dependencyStateRoot()/"history.log");
