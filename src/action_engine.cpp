@@ -106,13 +106,19 @@ ActionResult executeCommand(const CommandSpec& command) {
         }
 
         const auto filename = absolute.filename().string();
-        const bool validPath =
-            (command.executable == "python" || command.executable == "python.exe")
-                ? (filename == "python.exe")
-                : (command.executable == "node" || command.executable == "node.exe")
-                    ? (filename == "node.exe")
-                    : false;
-        if (!validPath)
+        const auto expectedFilename = [](const std::string& executable) -> const char* {
+            if (executable == "python" || executable == "python.exe") return "python.exe";
+            if (executable == "node" || executable == "node.exe") return "node.exe";
+            if (executable == "git") return "git.exe";
+            if (executable == "cmake") return "cmake.exe";
+            if (executable == "dotnet" || executable == "dotnet.exe") return "dotnet.exe";
+            if (executable == "npm" || executable == "npm.cmd") return "npm.cmd";
+            if (executable == "winget" || executable == "winget.exe") return "winget.exe";
+            if (executable == "where") return "where.exe";
+            return nullptr;
+        };
+        const char* expected = expectedFilename(command.executable);
+        if (expected == nullptr || filename != expected)
             return {false, -1, {}, "configured executable path does not match the allowlisted tool"};
 
         executablePath = absolute;
