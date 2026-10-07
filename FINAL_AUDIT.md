@@ -36,6 +36,7 @@ Audit scope:
 - Tool discovery applies the same Windows trust-root rule and rejects executables nested under the current directory, preventing project-local executables from masquerading as discovered runtimes.
 - PATH and environment baselines are accepted only from Handler-owned persistent state.
 - Transaction artifact filenames now include a deterministic source-path digest, preventing same-named artifacts from different projects from overwriting one another.
+- Transaction artifacts now carry a content fingerprint; restore rejects same-size backup tampering and verifies the restored file fingerprint before reporting success.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Second-pass audit status
