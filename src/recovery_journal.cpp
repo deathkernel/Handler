@@ -149,6 +149,32 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
     return activeIds;
 }
 
+bool RecoveryJournal::hasCorruptEntries() const {
+    std::ifstream in(file_);
+    if (!in) return false;
+
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+
+        const auto first = line.find(" | ");
+        if (first == std::string::npos) return true;
+        const auto second = line.find(" | ", first + 3);
+        if (second == std::string::npos) return true;
+
+        const auto firstField = line.substr(first + 3, second - (first + 3));
+        if (firstField.rfind("tx=", 0) == 0) {
+            if (firstField.size() <= 3) return true;
+            const auto third = line.find(" | ", second + 3);
+            if (third == std::string::npos) return true;
+            const auto stage = line.substr(second + 3, third - (second + 3));
+            if (stage.empty()) return true;
+        } else if (firstField.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
 bool RecoveryJournal::hasUnfinishedTransaction() const {
     return !unfinishedTransactionIds().empty();
 }
