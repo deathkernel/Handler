@@ -41,6 +41,8 @@ Audit scope:
 - Transactions now acquire an OS-backed exclusive lock under Handler transaction state, preventing concurrent Handler processes from mutating the same environment and journal simultaneously; the OS releases the lock if the process exits unexpectedly.
 - Manual snapshot rollback now acquires the same transaction lock and records a terminal MANUAL_ROLLBACK stage; if journal persistence fails, the command fails closed instead of silently claiming recovery is complete.
 - Recovery journal entries now carry a transaction ID; active/terminal state is tracked per transaction, preventing an older transaction's terminal entry from clearing a newer transaction's interrupted state. Legacy three-field journal entries remain readable.
+- Destructive TEMP cleanup now uses the shared transaction lock and recovery journal; dry-runs remain side-effect free, while partial cleanup is marked RECOVERY_REQUIRED and blocks subsequent mutations until review.
+- RECOVERY_REQUIRED is now an active recovery state rather than a terminal state, so partial/uncertain mutations cannot silently reopen the mutation surface.
 - Manual rollback now closes the uniquely active transaction by ID and refuses to guess if the journal contains multiple active transaction identities.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
