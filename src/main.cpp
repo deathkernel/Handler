@@ -646,7 +646,17 @@ int runRollback(const std::string& id) {
         return 1;
     }
     handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
-    if (!journal.record("MANUAL_ROLLBACK", id)) {
+    const auto unfinished = journal.unfinishedTransactionIds();
+    bool journalUpdated = false;
+    if (unfinished.size() == 1 && !unfinished.front().empty())
+        journalUpdated = journal.record(unfinished.front(), "MANUAL_ROLLBACK", id);
+    else if (unfinished.empty())
+        journalUpdated = journal.record("MANUAL_ROLLBACK", id);
+    else {
+        std::cerr << "Rollback applied, but recovery journal has multiple active transactions; manual recovery review is required before further mutations.\n";
+        return 1;
+    }
+    if (!journalUpdated) {
         std::cerr << "Rollback applied, but recovery journal could not be updated; retry recovery review before further mutations.\n";
         return 1;
     }
