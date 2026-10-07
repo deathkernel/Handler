@@ -30,11 +30,25 @@ Audit scope:
 ## 0.9.0 security hardening completed
 
 - Windows command execution now rejects resolved executables outside trusted installation roots.
-- Explicit Windows executable paths are canonicalized and must belong to a trusted installation root, the detected project working directory, or Handler-owned state.
-- Tool discovery applies the same Windows trust-root rule, preventing a project-local executable from masquerading as a discovered runtime.
+- Explicit Windows executable paths are canonicalized and must belong to a trusted installation root, Handler-owned state, or the narrowly-defined project-local Python virtual-environment layout (.venv/venv/Scripts/python.exe).
+- Windows npm.cmd execution is routed through a trusted cmd.exe interpreter rather than passed directly to CreateProcessW.
+- Windows child-process handle inheritance is restricted to Handler's stdout/stderr pipe via STARTUPINFOEX handle-list attributes.
+- Tool discovery applies the same Windows trust-root rule and rejects executables nested under the current directory, preventing project-local executables from masquerading as discovered runtimes.
 - PATH and environment baselines are accepted only from Handler-owned persistent state.
 - Transaction artifact filenames now include a deterministic source-path digest, preventing same-named artifacts from different projects from overwriting one another.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
+
+## Second-pass audit status
+
+The second pass found and fixed three additional Windows execution-boundary issues:
+
+1. Generic workingDirectory executable trust was narrowed so a project cannot simply place a fake python.exe in an arbitrary directory and have Handler execute it.
+2. Windows .cmd execution was corrected for npm; CreateProcessW does not directly execute batch files, so npm is launched through the trusted system command interpreter.
+3. Child-process handle inheritance was narrowed to the output pipe instead of inheriting every inheritable handle in the Handler process.
+
+The branch has been updated to 0.9.0 project metadata and main.cpp now uses the centralized Handler state-root implementation.
+
+A local build could not be executed in this audit environment because outbound GitHub cloning/DNS is unavailable. Therefore compile/test status is **not asserted** here; the GitHub Actions run remains the authoritative build gate.
 
 ## Remaining bounded limitations
 
