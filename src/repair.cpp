@@ -128,7 +128,7 @@ int repairPythonModule(const char* rawPackage) {
         RiskLevel::High,
         [&] {
             CommandSpec install{"python-repair", "python",
-                {"-m", "pip", "install", package, "--disable-pip-version-check"},
+                {"-m", "pip", "install", package, "--disable-pip-version-check", "--only-binary=:all:"},
                 RiskLevel::High, 180000};
             install.executablePath = pythonPath;
             const auto r = executeCommand(install);
@@ -166,7 +166,7 @@ int repairPythonModule(const char* rawPackage) {
 
             CommandSpec rollback{"python-repair-rollback", "python",
                 {"-m", "pip", "install", package + "==" + previousVersion,
-                 "--disable-pip-version-check"}, RiskLevel::High, 120000};
+                 "--disable-pip-version-check", "--only-binary=:all:"}, RiskLevel::High, 120000};
             rollback.executablePath = pythonPath;
             const auto result = executeCommand(rollback);
             return result.started && result.exitCode == 0;
