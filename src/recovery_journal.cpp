@@ -20,13 +20,13 @@ namespace {
 
 bool isActiveStage(const std::string& stage) {
     return stage == "START" || stage == "SNAPSHOT" ||
-           stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN";
+           stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN" ||
+           stage == "RECOVERY_REQUIRED";
 }
 
 bool isTerminalStage(const std::string& stage) {
     return stage == "COMMIT" || stage == "ROLLBACK" ||
-           stage == "ABORT" || stage == "RECOVERY_REQUIRED" ||
-           stage == "MANUAL_ROLLBACK" || stage == "RECOVERY_COMPLETE";
+           stage == "ABORT" || stage == "MANUAL_ROLLBACK" || stage == "RECOVERY_COMPLETE";
 }
 
 std::string processIdString() {
