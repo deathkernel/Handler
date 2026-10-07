@@ -175,9 +175,8 @@ bool RecoveryJournal::hasCorruptEntries() const {
             if (third == std::string::npos) return true;
             const auto stage = line.substr(second + 3, third - (second + 3));
             if (stage.empty() || !isKnownStage(stage)) return true;
-        } else if (firstField.empty()) {
-            if (!isKnownStage(firstField)) return true;
-            return true;
+        } else {
+            if (firstField.empty() || !isKnownStage(firstField)) return true;
         }
     }
     return false;
