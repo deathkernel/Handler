@@ -216,7 +216,9 @@ int main() {
     assert(journalTest.hasUnfinishedTransaction());
     assert(journalTest.record("START", "test"));
     assert(journalTest.record("ROLLBACK", "test"));
-    assert(!journalTest.hasUnfinishedTransaction());
+    // A terminal record must not make a journal with corrupt entries trusted again.
+    assert(journalTest.hasCorruptEntries());
+    assert(journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
 
     Transaction rollbackTx(SafetyMode::Confirm);
