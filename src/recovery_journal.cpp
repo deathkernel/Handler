@@ -20,8 +20,8 @@ namespace {
 
 bool isActiveStage(const std::string& stage) {
     return stage == "START" || stage == "SNAPSHOT" ||
-           stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN" ||
-           stage == "RECOVERY_REQUIRED";
+           stage == "SNAPSHOT_FAILED" || stage == "ACTION_BEGIN" ||
+           stage == "VERIFY_BEGIN" || stage == "RECOVERY_REQUIRED";
 }
 
 bool isTerminalStage(const std::string& stage) {
@@ -31,6 +31,24 @@ bool isTerminalStage(const std::string& stage) {
 
 bool isKnownStage(const std::string& stage) {
     return isActiveStage(stage) || isTerminalStage(stage);
+}
+
+bool isValidTransactionId(const std::string& transactionId) {
+    return !transactionId.empty() &&
+           transactionId.find('|') == std::string::npos &&
+           transactionId.find('\r') == std::string::npos &&
+           transactionId.find('\n') == std::string::npos;
+}
+
+std::string sanitizeDetails(const std::string& details) {
+    std::string sanitized;
+    sanitized.reserve(details.size());
+    for (const char ch : details) {
+        if (ch == '\r') sanitized += "\\r";
+        else if (ch == '\n') sanitized += "\\n";
+        else sanitized += ch;
+    }
+    return sanitized;
 }
 
 std::string processIdString() {
@@ -75,14 +93,17 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
     gmtime_r(&now, &utc);
 #endif
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
-        << " | " << stage << " | " << details << '\n';
-    return out.good();
+        << " | " << stage << " | " << sanitizeDetails(details) << '\n';
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    return writeSucceeded && !out.fail();
 }
 
 bool RecoveryJournal::record(const std::string& transactionId,
                              const std::string& stage,
                              const std::string& details) const {
-    if (transactionId.empty() || !isKnownStage(stage)) return false;
+    if (!isValidTransactionId(transactionId) || !isKnownStage(stage)) return false;
 
     std::error_code ec;
     if (!file_.parent_path().empty())
@@ -102,8 +123,11 @@ bool RecoveryJournal::record(const std::string& transactionId,
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
         << " | tx=" << transactionId
         << " | " << stage
-        << " | " << details << '\n';
-    return out.good();
+        << " | " << sanitizeDetails(details) << '\n';
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    return writeSucceeded && !out.fail();
 }
 
 std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
@@ -148,6 +172,8 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
         }
     }
 
+    if (in.bad() && std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
+        activeIds.emplace_back();
     if (legacyActive)
         activeIds.emplace_back();
     return activeIds;
@@ -155,7 +181,10 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 
 bool RecoveryJournal::hasCorruptEntries() const {
     std::ifstream in(file_);
-    if (!in) return false;
+    if (!in) {
+        std::error_code ec;
+        return std::filesystem::exists(file_, ec) || static_cast<bool>(ec);
+    }
 
     std::string line;
     while (std::getline(in, line)) {
@@ -177,7 +206,7 @@ bool RecoveryJournal::hasCorruptEntries() const {
             if (firstField.empty() || !isKnownStage(firstField)) return true;
         }
     }
-    return false;
+    return in.bad();
 }
 bool RecoveryJournal::hasUnfinishedTransaction() const {
     return hasCorruptEntries() || !unfinishedTransactionIds().empty();

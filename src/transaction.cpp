@@ -7,14 +7,46 @@
 #include <cstdlib>
 
 #include <filesystem>
+#include <exception>
 
 namespace handler {
+namespace {
+
+bool invokeRollbackSafely(const Transaction::Rollback& rollback) noexcept {
+    if (!rollback) return false;
+    try {
+        return rollback();
+    } catch (...) {
+        return false;
+    }
+}
+
+void recordRollbackOutcome(const RecoveryJournal& journal,
+                           const std::string& transactionId,
+                           bool rollbackOk,
+                           const std::string& successDetails,
+                           const std::string& failureDetails) {
+    if (rollbackOk) {
+        journal.record(transactionId, "ROLLBACK", successDetails);
+    } else {
+        journal.record(transactionId, "RECOVERY_REQUIRED", failureDetails);
+    }
+}
+
+} // namespace
 
 Transaction::Transaction(SafetyMode mode) : mode_(mode) {}
 
 TransactionResult Transaction::run(RiskLevel risk, const Action& action,
                                    const Verify& verify, const Rollback& rollback) {
-    const auto decision = preApproved_ ? PolicyDecision{true, false, "explicitly pre-confirmed"} : evaluatePolicy(mode_, risk);
+    return runInternal(false, risk, action, verify, rollback);
+}
+
+TransactionResult Transaction::runInternal(bool approved, RiskLevel risk,
+                                           const Action& action,
+                                           const Verify& verify,
+                                           const Rollback& rollback) {
+    const auto decision = approved ? PolicyDecision{true, false, "explicitly pre-confirmed"} : evaluatePolicy(mode_, risk);
     if (!decision.allowed)
         return {false, false, false, {}, decision.reason};
 
@@ -49,24 +81,51 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
     if (!journal.record(transactionId, "ACTION_BEGIN", "transaction action started"))
         return {false, false, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "transaction aborted: recovery journal unavailable before action"};
 
-    const bool actionOk = action();
+    bool actionOk = false;
+    try {
+        actionOk = action();
+    } catch (...) {
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "action threw an exception; rollback verified by callback",
+                              "action threw an exception; recovery is required because rollback failed or was unavailable");
+        return {false, rollbackOk, snapshot.has_value(),
+                snapshot ? snapshot->id : std::string{}, "action threw an exception; rollback invoked"};
+    }
     if (!actionOk) {
-        const bool rollbackOk = rollback ? rollback() : false;
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "action failed; rollback verified by callback" : "action failed; rollback failed or unavailable");
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "action failed; rollback verified by callback",
+                              "action failed; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{}, "action failed; rollback invoked"};
     }
 
     if (!journal.record(transactionId, "VERIFY_BEGIN", "transaction verification started")) {
-        const bool rollbackOk = rollback ? rollback() : false;
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "journal failure; rollback verified by callback" : "journal failure; rollback failed or unavailable");
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "journal failure; rollback verified by callback",
+                              "journal failure; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "verification aborted: recovery journal unavailable"};
     }
 
-    const auto verification = verify();
+    VerificationResult verification{};
+    try {
+        verification = verify();
+    } catch (...) {
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "verification threw an exception; rollback verified by callback",
+                              "verification threw an exception; recovery is required because rollback failed or was unavailable");
+        return {false, rollbackOk, snapshot.has_value(),
+                snapshot ? snapshot->id : std::string{},
+                "verification threw an exception; rollback invoked"};
+    }
     if (!verification.passed) {
-        const bool rollbackOk = rollback ? rollback() : false;
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "verification failed; rollback verified by callback" : "verification failed; rollback failed or unavailable");
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "verification failed; rollback verified by callback",
+                              "verification failed; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{},
                 "verification failed; rollback invoked"};
@@ -81,12 +140,7 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
 
 TransactionResult Transaction::runApproved(RiskLevel risk, const Action& action,
                                            const Verify& verify, const Rollback& rollback) {
-    if (!action || !verify)
-        return {false, false, false, {}, "invalid transaction callbacks"};
-    preApproved_ = true;
-    const auto result = run(risk, action, verify, rollback);
-    preApproved_ = false;
-    return result;
+    return runInternal(true, risk, action, verify, rollback);
 }
 
 } // namespace handler

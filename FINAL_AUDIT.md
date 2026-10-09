@@ -18,7 +18,7 @@ Audit scope:
 
 - Snapshot IDs/path handling was hardened against traversal and malformed IDs; regression coverage was added.
 - Snapshot filename collisions are handled without overwriting an existing snapshot.
-- Environment state capture now reports the 0.8.0 release version and uses portable Unix hostname/user/TMPDIR fallbacks.
+- Environment state capture reports Handler 0.9.0 and uses portable Unix hostname/user/TMPDIR fallbacks.
 - Toolchain Doctor now uses an explicitly approved transaction path rather than a second unfulfilled confirmation gate.
 - Transaction rollback callbacks now return a real success/failure result instead of being treated as successful merely because a callback existed.
 - Python dependency upgrades require a project-local .venv/venv instead of modifying a global interpreter.
@@ -80,7 +80,7 @@ GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; al
 
 ## Audit conclusion
 
-The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The previously verified CI run #548 is green across all three supported CI operating systems; the latest transaction-recovery changes remain gated on their newer CI run.
+The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The baseline main-branch CI run 37918735056 passed on Ubuntu, macOS, and Windows. The newer CLI/dependency regression changes on PR #15 require their own CI run to pass before merge.
 
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
 
@@ -111,3 +111,69 @@ The repository is release-oriented within its documented scope, but the limitati
 
 - Environment-state capture now reports Handler 0.9.0 instead of the stale 0.8.0 value.
 - Added regression coverage so future release-version changes cannot silently leave captured state metadata stale.
+
+
+## Audit refresh — 2026-10-09
+
+The audit was refreshed for the Handler 0.9.0 codebase; the additional regression tests in this branch are pending the PR's own CI run.
+
+- **Current version:** Handler 0.9.0, consistent across `CMakeLists.txt`, CLI `handler version`, and captured environment-state metadata.
+- **Latest cross-platform CI:** [Build Handler run 37918735056](https://github.com/deathkernel/Handler/actions/runs/37918735056), commit `1ebbcdef796418579c0f639b41fab610cece7a9f`. Ubuntu, macOS, and Windows build and test jobs all completed successfully.
+- **CLI integration coverage:** CTest exercises version/help/default invocation, safe risk classification, unknown commands, dependency inspection, undeclared dependency-upgrade rejection, unknown-snapshot rollback rejection, invalid repair-target rejection, and missing-argument usage paths. A CMake helper verifies both nonzero exit status and expected diagnostic text for guarded failure cases, including missing-argument usage errors. Core tests cover transaction rollback status, journal corruption/fail-closed behavior, artifact/snapshot integrity, and dependency version-selection edge cases including caret, tilde, exclusions, and unsatisfiable ranges.
+- **Security hardening:** PR #14 was merged into `main`; transaction rollback regression tests from the superseded PR #5 were retained and pass in CI.
+
+### Stage A recovery and regression updates — 2026-10-09
+
+The current PR branch also includes the following changes; these are **not considered verified until CI completes for the current head**:
+
+- Transaction action and verification exceptions are caught and trigger a rollback attempt.
+- Rollback callback exceptions and false returns are treated as rollback failure; the transaction is recorded as `RECOVERY_REQUIRED` instead of falsely closing the recovery record.
+- `runApproved` clears its one-shot approval state after normal return and when an exception propagates.
+- Recovery-journal details escape carriage returns and newlines so a detail string cannot inject extra physical records.
+- Recovery-journal writes flush and check stream-close status before reporting persistence success.
+- Artifact content fingerprinting now rejects underlying file-read errors instead of returning a partial digest.
+- Failed snapshot creation is represented as an active journal stage until a terminal outcome is recorded.
+- Snapshot IDs use a stable per-create base and suffix collisions without overwriting an existing snapshot.
+- Snapshot creation flushes and checks stream close status and removes a partial file if persistence fails.
+- Snapshot creation rejects carriage-return/newline values that could inject extra key/value records, and snapshot loading rejects stream I/O errors.
+- Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, one-shot approval not leaking to a later high-risk transaction, multiline journal details, blocked journal storage, failed snapshots, snapshot record-injection rejection, and multiple snapshots created within one timestamp interval.
+
+The documentation refresh itself creates a new PR head; use the live [PR #15 page](https://github.com/deathkernel/Handler/pull/15) to identify the exact current SHA. The latest CI result must match that SHA before merging.
+
+### Known implementation boundaries
+
+These are deliberate limitations, not completed capabilities:
+
+- Automatic toolchain repair is enabled only for supported installed-tool targets through winget on Windows. Linux/macOS automatic toolchain package repair remains disabled.
+- Dependency resolution is a lightweight constraint/version selector, not a complete lockfile-aware SAT solver.
+- npm install/rollback paths intentionally skip lifecycle scripts; Python repair/rollback is restricted to binary wheels where specified.
+- Deep cleanup remains a low-level foundation and is not exposed as a supported CLI command.
+- Recovery snapshots protect Handler's captured state/artifacts; they do not imply universal filesystem or operating-system package rollback.
+
+The CI result above verifies the commit named in the link. Any later commit must be evaluated using its own CI status before being described as cross-platform verified.
+
+
+### Additional recovery-boundary review — 2026-10-09
+
+A further code review identified two fail-closed boundary cases and added regression coverage:
+
+- Explicit transaction approval is now passed only to the approved call; nested or re-entrant calls do not inherit a shared approval flag.
+- Recovery-journal transaction IDs containing field delimiters or line breaks are rejected before writing.
+- An existing journal that cannot be read is treated as corrupt/unsafe instead of being mistaken for an empty journal.
+- Regression tests cover nested high-risk execution during an approved transaction, malformed transaction IDs, and unreadable-journal handling.
+
+These follow-up changes are included in PR #15. **Cross-platform verification remains pending until GitHub Actions completes for the latest PR head.**
+
+
+### Snapshot identity consistency — 2026-10-09
+
+- Snapshot loading now rejects a SnapshotInfo whose ID does not match the canonical filename, even when the supplied path points to another valid snapshot inside the trusted snapshot directory.
+- Added a regression test for mismatched in-root snapshot IDs and paths.
+- Latest cross-platform CI is still required before declaring Stage A complete.
+
+
+### Release-mode regression assertion integrity — 2026-10-09
+
+- The core test executable uses `assert()` extensively. Release configurations commonly define `NDEBUG`, which disables those checks unless explicitly undefined.
+- The `handler_tests` target now undefines `NDEBUG` on MSVC and non-MSVC compilers so assertions remain active in the same Release configuration used by CI.
+- Cross-platform CI must confirm these changes before Stage A can be declared complete.

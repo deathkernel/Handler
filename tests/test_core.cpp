@@ -23,8 +23,10 @@
 #include "handler/repair.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <chrono>
 #include <iostream>
+#include <stdexcept>
 #include <fstream>
 #include <filesystem>
 #include <vector>
@@ -180,6 +182,30 @@ int main() {
     assert(identityJournal.record(transactionB, "MANUAL_ROLLBACK", "B"));
     assert(!identityJournal.hasUnfinishedTransaction());
 
+    const auto failedSnapshotTransaction = RecoveryJournal::newTransactionId();
+    assert(identityJournal.record(failedSnapshotTransaction, "START", "begin"));
+    assert(identityJournal.record(failedSnapshotTransaction, "SNAPSHOT_FAILED", "snapshot unavailable"));
+    assert(!identityJournal.hasCorruptEntries());
+    const auto activeAfterSnapshotFailure = identityJournal.unfinishedTransactionIds();
+    assert(activeAfterSnapshotFailure.size() == 1 &&
+           activeAfterSnapshotFailure.front() == failedSnapshotTransaction);
+    assert(identityJournal.record(failedSnapshotTransaction, "ABORT", "recovery snapshot unavailable"));
+    assert(!identityJournal.hasUnfinishedTransaction());
+
+    const auto multilineTransaction = RecoveryJournal::newTransactionId();
+    assert(identityJournal.record(multilineTransaction, "START", "first line\nsecond line\rthird line"));
+    assert(!identityJournal.hasCorruptEntries());
+    const auto multilineActive = identityJournal.unfinishedTransactionIds();
+    assert(multilineActive.size() == 1 && multilineActive.front() == multilineTransaction);
+    assert(identityJournal.record(multilineTransaction, "COMMIT", "finished"));
+    assert(!identityJournal.hasUnfinishedTransaction());
+
+    // Transaction IDs are parsed as a single journal field and must not inject delimiters.
+    assert(!identityJournal.record("invalid|tx=injected", "START", "must be rejected"));
+    assert(!identityJournal.record("invalid\ntransaction", "START", "must be rejected"));
+    assert(!identityJournal.hasCorruptEntries());
+    assert(!identityJournal.hasUnfinishedTransaction());
+
     {
         std::ofstream legacy(journalIdentityFile, std::ios::app);
         legacy << "2026-10-07T00:00:00Z | START | legacy\n";
@@ -196,6 +222,23 @@ int main() {
     assert(identityJournal.hasCorruptEntries());
     assert(identityJournal.hasUnfinishedTransaction());
     std::filesystem::remove(journalIdentityFile, testEc);
+
+    const auto journalBlockedRoot = std::filesystem::temp_directory_path() / "handler-journal-parent-file";
+    std::filesystem::remove_all(journalBlockedRoot, testEc);
+    { std::ofstream blocked(journalBlockedRoot); blocked << "not a directory"; }
+    RecoveryJournal blockedJournal(journalBlockedRoot / "recovery.log");
+    assert(!blockedJournal.record("START", "must fail"));
+    std::filesystem::remove(journalBlockedRoot, testEc);
+
+    // An existing but unreadable journal must fail closed, not look like an empty journal.
+    const auto journalDirectoryPath = std::filesystem::temp_directory_path() / "handler-journal-directory";
+    std::filesystem::remove_all(journalDirectoryPath, testEc);
+    std::filesystem::create_directories(journalDirectoryPath, testEc);
+    assert(!testEc);
+    RecoveryJournal directoryJournal(journalDirectoryPath);
+    assert(directoryJournal.hasCorruptEntries());
+    assert(directoryJournal.hasUnfinishedTransaction());
+    std::filesystem::remove_all(journalDirectoryPath, testEc);
 
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
     std::filesystem::remove(journalTestFile, testEc);
@@ -245,6 +288,38 @@ int main() {
     assert(verificationFailure.rolledBack);
     assert(rollbackCalled);
 
+    rollbackCalled = false;
+    Transaction throwingAction(SafetyMode::Auto);
+    const auto actionException = throwingAction.run(
+        RiskLevel::Low,
+        []() -> bool { throw std::runtime_error("forced action exception"); },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [&] { rollbackCalled = true; return true; });
+    assert(!actionException.committed);
+    assert(actionException.rolledBack);
+    assert(rollbackCalled);
+
+    rollbackCalled = false;
+    Transaction throwingVerification(SafetyMode::Auto);
+    const auto verificationException = throwingVerification.run(
+        RiskLevel::Low,
+        [] { return true; },
+        []() -> VerificationResult { throw std::runtime_error("forced verification exception"); },
+        [&] { rollbackCalled = true; return true; });
+    assert(!verificationException.committed);
+    assert(verificationException.rolledBack);
+    assert(rollbackCalled);
+
+    Transaction throwingRollback(SafetyMode::Auto);
+    const auto rollbackException = throwingRollback.run(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        []() -> bool { throw std::runtime_error("forced rollback exception"); });
+    assert(!rollbackException.committed);
+    assert(!rollbackException.rolledBack);
+    assert(rollbackException.details == "action failed; rollback invoked");
+
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
     std::filesystem::remove_all(cleanupRoot, testEc);
     std::filesystem::create_directories(cleanupRoot, testEc);
@@ -277,6 +352,38 @@ int main() {
         [] { return true; });
     assert(!rollbackOk.committed && rollbackOk.rolledBack);
 
+    // runApproved must be one-shot: it must not silently approve the next high-risk run.
+    bool highRiskActionRan = false;
+    const auto highRiskAfterApproval = rollbackTx.run(
+        RiskLevel::High,
+        [&] { highRiskActionRan = true; return true; },
+        [] { return VerificationResult{true, "verified", ""}; },
+        [] { return true; });
+    assert(!highRiskAfterApproval.committed);
+    assert(!highRiskActionRan);
+
+    // Explicit approval applies only to the transaction it approves, not nested runs.
+    Transaction nestedApprovalTx(SafetyMode::Confirm);
+    bool nestedHighRiskRan = false;
+    bool nestedPolicyBlocked = false;
+    const auto approvedOuter = nestedApprovalTx.runApproved(
+        RiskLevel::Low,
+        [&] {
+            const auto nestedHighRisk = nestedApprovalTx.run(
+                RiskLevel::High,
+                [&] { nestedHighRiskRan = true; return true; },
+                [] { return VerificationResult{true, "verified", ""}; },
+                [] { return true; });
+            nestedPolicyBlocked =
+                nestedHighRisk.details == "user confirmation required before execution";
+            return true;
+        },
+        [] { return VerificationResult{true, "outer verified", ""}; },
+        [] { return true; });
+    assert(approvedOuter.committed);
+    assert(nestedPolicyBlocked);
+    assert(!nestedHighRiskRan);
+
     Transaction rollbackFailTx(SafetyMode::Confirm);
     const auto rollbackFail = rollbackFailTx.runApproved(
         RiskLevel::Low,
@@ -284,6 +391,37 @@ int main() {
         [] { return VerificationResult{true, "not reached", ""}; },
         [] { return false; });
     assert(!rollbackFail.committed && !rollbackFail.rolledBack);
+
+    // A failed rollback must remain visible as an unfinished recovery transaction.
+    const auto isolatedStateRoot = std::filesystem::temp_directory_path() / "handler-rollback-recovery-state";
+    std::filesystem::remove_all(isolatedStateRoot, testEc);
+    const char* oldStateRootRaw = nullptr;
+#ifdef _WIN32
+    oldStateRootRaw = std::getenv("LOCALAPPDATA");
+    const std::string oldStateRoot = oldStateRootRaw ? oldStateRootRaw : "";
+    _putenv_s("LOCALAPPDATA", isolatedStateRoot.string().c_str());
+#else
+    oldStateRootRaw = std::getenv("XDG_STATE_HOME");
+    const std::string oldStateRoot = oldStateRootRaw ? oldStateRootRaw : "";
+    setenv("XDG_STATE_HOME", isolatedStateRoot.string().c_str(), 1);
+#endif
+    Transaction recoveryRequiredTx(SafetyMode::Auto);
+    const auto recoveryRequired = recoveryRequiredTx.run(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [] { return false; });
+    assert(!recoveryRequired.committed && !recoveryRequired.rolledBack);
+    RecoveryJournal isolatedJournal(handlerTransactionRoot() / "recovery.log");
+    assert(!isolatedJournal.hasCorruptEntries());
+    assert(isolatedJournal.hasUnfinishedTransaction());
+#ifdef _WIN32
+    _putenv_s("LOCALAPPDATA", oldStateRoot.c_str());
+#else
+    if (oldStateRoot.empty()) unsetenv("XDG_STATE_HOME");
+    else setenv("XDG_STATE_HOME", oldStateRoot.c_str(), 1);
+#endif
+    std::filesystem::remove_all(isolatedStateRoot, testEc);
 
     const auto low = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
     assert(low.allowed && !low.requiresConfirmation);
@@ -300,6 +438,21 @@ int main() {
     const auto invalidDependencyRoot =
         std::filesystem::temp_directory_path() / "handler-invalid-dependency-test";
     std::filesystem::remove_all(invalidDependencyRoot, ec);
+
+    // Inspection and version-selection edge cases must remain deterministic and side-effect free.
+    const auto emptyDependencyRoot =
+        std::filesystem::temp_directory_path() / "handler-empty-dependency-test";
+    std::filesystem::remove_all(emptyDependencyRoot, ec);
+    std::filesystem::create_directories(emptyDependencyRoot, ec);
+    assert(!ec);
+    const auto emptyPythonInfo = inspectDependencies(emptyDependencyRoot, "Python");
+    assert(emptyPythonInfo.manifest.empty());
+    assert(emptyPythonInfo.declared.empty());
+    assert(!parseDependencyVersion("not-a-version").has_value());
+    assert(!parseDependencyVersion("").has_value());
+    assert(!selectCompatibleDependencyVersion(
+        {">=4.0,<3.0"}, {"2.9.0", "3.5.0", "4.0.0"}).has_value());
+    std::filesystem::remove_all(emptyDependencyRoot, ec);
     std::filesystem::create_directories(invalidDependencyRoot, ec);
     assert(upgradeDependency(invalidDependencyRoot, "Python", "bad;package", ">=1.0") == 3);
     assert(upgradeDependency(invalidDependencyRoot, "Node.js", "bad;package", ">=1.0") == 3);
@@ -360,6 +513,16 @@ int main() {
     const auto caret = selectCompatibleDependencyVersion(
         {"^2.1.0"}, {"2.0.0", "2.1.0", "2.9.0", "3.0.0"});
     assert(caret.has_value() && *caret == "2.9.0");
+    const auto tilde = selectCompatibleDependencyVersion(
+        {"~1.4.0"}, {"1.3.9", "1.4.0", "1.4.9", "1.5.0"});
+    assert(tilde.has_value() && *tilde == "1.4.9");
+    const auto zeroCaret = selectCompatibleDependencyVersion(
+        {"^0.2.0"}, {"0.1.9", "0.2.0", "0.2.8", "0.3.0"});
+    assert(zeroCaret.has_value() && *zeroCaret == "0.2.8");
+    const auto excluded = selectCompatibleDependencyVersion(
+        {">=1.0,!=1.5.0,<2.0"}, {"1.4.9", "1.5.0", "1.8.0", "2.0.0"});
+    assert(excluded.has_value() && *excluded == "1.8.0");
+    assert(!satisfiesDependencyConstraint(*v250, "!=2.5.0"));
 
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
@@ -390,12 +553,24 @@ int main() {
     state.currentDirectory = std::filesystem::current_path();
     const auto snapshot = snapshots.create(state);
     assert(snapshot.has_value());
+    const auto secondSnapshot = snapshots.create(state);
+    assert(secondSnapshot.has_value());
+    assert(secondSnapshot->id != snapshot->id);
     assert(snapshots.find(snapshot->id).has_value());
     assert(snapshots.load(*snapshot).has_value());
-    assert(snapshots.list().size() == 1);
+    assert(snapshots.load(*secondSnapshot).has_value());
+    assert(snapshots.list().size() == 2);
+    auto malformedState = state;
+    malformedState.userName = "user\ncomputer_name=injected";
+    assert(!snapshots.create(malformedState).has_value());
+    assert(snapshots.list().size() == 2);
     assert(!snapshots.find("../outside").has_value());
     SnapshotInfo traversal{"../outside", tempRoot / ".." / "outside.state"};
     assert(!snapshots.load(traversal).has_value());
+
+    // A snapshot ID and path must refer to the same file, even within the trusted root.
+    SnapshotInfo mismatchedSnapshot{snapshot->id, secondSnapshot->path};
+    assert(!snapshots.load(mismatchedSnapshot).has_value());
     {
         std::ofstream corruptSnapshot(snapshot->path, std::ios::trunc);
         corruptSnapshot << "timestamp_utc=test\n"

@@ -1,6 +1,7 @@
 #include "handler/snapshot.h"
 
 #include <chrono>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -9,6 +10,11 @@
 namespace handler {
 
 namespace {
+bool containsLineBreak(const std::string& value) {
+    return value.find('\n') != std::string::npos ||
+           value.find('\r') != std::string::npos;
+}
+
 std::string snapshotId() {
     const auto now = std::chrono::system_clock::now();
     const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -20,15 +26,29 @@ std::string snapshotId() {
 SnapshotStore::SnapshotStore(std::filesystem::path root) : root_(std::move(root)) {}
 
 std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state) const {
+    // Snapshot records are line-oriented key/value pairs. Reject values that
+    // could inject additional fields or make the snapshot impossible to parse.
+    if (containsLineBreak(state.timestampUtc) ||
+        containsLineBreak(state.computerName) ||
+        containsLineBreak(state.userName) ||
+        containsLineBreak(state.tempPath) ||
+        containsLineBreak(state.pathValue) ||
+        containsLineBreak(state.currentDirectory.string()) ||
+        containsLineBreak(state.handlerVersion))
+        return std::nullopt;
+
     std::error_code ec;
     std::filesystem::create_directories(root_, ec);
     if (ec) return std::nullopt;
 
-    std::string id = snapshotId();
+    const std::string baseId = snapshotId();
+    std::string id = baseId;
     std::error_code collisionEc;
-    for (unsigned int suffix = 0; std::filesystem::exists(root_ / (id + ".state"), collisionEc); ++suffix) {
+    for (unsigned int suffix = 1;; ++suffix) {
+        const bool exists = std::filesystem::exists(root_ / (id + ".state"), collisionEc);
         if (collisionEc) return std::nullopt;
-        id = snapshotId() + "-" + std::to_string(suffix + 1);
+        if (!exists) break;
+        id = baseId + "-" + std::to_string(suffix);
     }
     const auto path = root_ / (id + ".state");
     std::ofstream out(path, std::ios::trunc);
@@ -42,7 +62,14 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
         << "current_directory=" << state.currentDirectory.string() << '\n'
         << "handler_version=" << state.handlerVersion << '\n';
 
-    if (!out.good()) return std::nullopt;
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    if (!writeSucceeded || out.fail()) {
+        std::error_code cleanupEc;
+        std::filesystem::remove(path, cleanupEc);
+        return std::nullopt;
+    }
     return SnapshotInfo{id, path};
 }
 
@@ -56,7 +83,8 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
     const auto canonicalRoot = std::filesystem::weakly_canonical(root_, ec);
     if (ec) return std::nullopt;
     const auto canonicalPath = std::filesystem::weakly_canonical(snapshot.path, ec);
-    if (ec || canonicalPath.parent_path() != canonicalRoot)
+    if (ec || canonicalPath.parent_path() != canonicalRoot ||
+        canonicalPath.filename() != snapshot.id + ".state")
         return std::nullopt;
 
     std::ifstream in(canonicalPath);
@@ -95,6 +123,7 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
             return std::nullopt;
         }
     }
+    if (in.bad()) return std::nullopt;
     if (!timestampSeen || !computerSeen || !userSeen || !tempSeen ||
         !pathSeen || !directorySeen || !versionSeen || state.currentDirectory.empty())
         return std::nullopt;
