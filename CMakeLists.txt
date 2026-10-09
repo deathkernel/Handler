@@ -179,6 +179,6 @@ set_tests_properties(handler_cli_detect_error_missing_text PROPERTIES
 add_test(NAME handler_cli_blocked_risk_check
     COMMAND ${CMAKE_COMMAND}
         -DHANDLER=$<TARGET_FILE:handler>
-        "-DARGS=risk;rm -rf /"
+        "-DARGS=risk;diskpart"
         "-DEXPECTED=Risk: BLOCKED"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
