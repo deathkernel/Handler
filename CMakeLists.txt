@@ -119,9 +119,12 @@ add_test(NAME handler_cli_safe_risk_check COMMAND handler risk "python --version
 set_tests_properties(handler_cli_safe_risk_check PROPERTIES
     PASS_REGULAR_EXPRESSION "Risk: SAFE")
 
-add_test(NAME handler_cli_unknown_command COMMAND handler handler-test-unknown-command)
-set_tests_properties(handler_cli_unknown_command PROPERTIES
-    WILL_FAIL TRUE)
+add_test(NAME handler_cli_unknown_command
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=handler-test-unknown-command"
+        "-DEXPECTED=Unknown Handler command"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
 # CLI regression checks for project inspection and guarded failure paths.
 add_test(NAME handler_cli_dependency_inspection COMMAND handler deps)
@@ -172,3 +175,10 @@ set_tests_properties(handler_cli_recovery_missing_error PROPERTIES
 add_test(NAME handler_cli_detect_error_missing_text COMMAND handler detect-error)
 set_tests_properties(handler_cli_detect_error_missing_text PROPERTIES
     PASS_REGULAR_EXPRESSION "Usage: handler detect-error")
+
+add_test(NAME handler_cli_blocked_risk_check
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=risk;rm -rf /"
+        "-DEXPECTED=Risk: BLOCKED"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
