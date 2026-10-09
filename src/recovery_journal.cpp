@@ -75,8 +75,7 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
     gmtime_r(&now, &utc);
 #endif
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
-        << " | " << stage << " | " << details << '
-';
+        << " | " << stage << " | " << details << '\\n';
     return out.good();
 }
 
@@ -103,8 +102,7 @@ bool RecoveryJournal::record(const std::string& transactionId,
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
         << " | tx=" << transactionId
         << " | " << stage
-        << " | " << details << '
-';
+        << " | " << details << '\\n';
     return out.good();
 }
 
