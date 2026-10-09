@@ -20,8 +20,8 @@ namespace {
 
 bool isActiveStage(const std::string& stage) {
     return stage == "START" || stage == "SNAPSHOT" ||
-           stage == "ACTION_BEGIN" || stage == "VERIFY_BEGIN" ||
-           stage == "RECOVERY_REQUIRED";
+           stage == "SNAPSHOT_FAILED" || stage == "ACTION_BEGIN" ||
+           stage == "VERIFY_BEGIN" || stage == "RECOVERY_REQUIRED";
 }
 
 bool isTerminalStage(const std::string& stage) {
