@@ -375,6 +375,16 @@ int main() {
     const auto caret = selectCompatibleDependencyVersion(
         {"^2.1.0"}, {"2.0.0", "2.1.0", "2.9.0", "3.0.0"});
     assert(caret.has_value() && *caret == "2.9.0");
+    const auto tilde = selectCompatibleDependencyVersion(
+        {"~1.4.0"}, {"1.3.9", "1.4.0", "1.4.9", "1.5.0"});
+    assert(tilde.has_value() && *tilde == "1.4.9");
+    const auto zeroCaret = selectCompatibleDependencyVersion(
+        {"^0.2.0"}, {"0.1.9", "0.2.0", "0.2.8", "0.3.0"});
+    assert(zeroCaret.has_value() && *zeroCaret == "0.2.8");
+    const auto excluded = selectCompatibleDependencyVersion(
+        {">=1.0,!=1.5.0,<2.0"}, {"1.4.9", "1.5.0", "1.8.0", "2.0.0"});
+    assert(excluded.has_value() && *excluded == "1.8.0");
+    assert(!satisfiesDependencyConstraint(*v250, "!=2.5.0"));
 
     const auto graph = buildDependencyGraph("demo", {"requests", "flask"});
     assert(graph.size() == 2);
