@@ -101,3 +101,24 @@ if (WIN32)
 endif()
 
 add_test(NAME handler_core_tests COMMAND handler_tests)
+
+// CLI smoke/integration coverage: exercise the built executable and its public routing.
+add_test(NAME handler_cli_version COMMAND handler version)
+set_tests_properties(handler_cli_version PROPERTIES
+    PASS_REGULAR_EXPRESSION "Handler 0\\.9\\.0")
+
+add_test(NAME handler_cli_help COMMAND handler help)
+set_tests_properties(handler_cli_help PROPERTIES
+    PASS_REGULAR_EXPRESSION "handler self-check")
+
+add_test(NAME handler_cli_no_arguments COMMAND handler)
+set_tests_properties(handler_cli_no_arguments PROPERTIES
+    PASS_REGULAR_EXPRESSION "Handler - Developer Environment Guardian")
+
+add_test(NAME handler_cli_safe_risk_check COMMAND handler risk "python --version")
+set_tests_properties(handler_cli_safe_risk_check PROPERTIES
+    PASS_REGULAR_EXPRESSION "Risk: SAFE")
+
+add_test(NAME handler_cli_unknown_command COMMAND handler handler-test-unknown-command)
+set_tests_properties(handler_cli_unknown_command PROPERTIES
+    WILL_FAIL TRUE)
