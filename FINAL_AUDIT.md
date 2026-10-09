@@ -135,7 +135,7 @@ The current PR branch also includes the following changes; these are **not consi
 - Snapshot creation flushes and checks stream close status and removes a partial file if persistence fails.
 - Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, multiline journal details, failed snapshots, and multiple snapshots created within one timestamp interval.
 
-Current PR head: `957df0bf7e2b55d6a4c888c9c95ae8ddc9997a32` at the time of this audit refresh. The latest CI result must be checked against the actual PR head before merging.
+The documentation refresh itself creates a new PR head; use the live [PR #15 page](https://github.com/deathkernel/Handler/pull/15) to identify the exact current SHA. The latest CI result must match that SHA before merging.
 
 ### Known implementation boundaries
 
