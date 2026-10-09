@@ -11,8 +11,8 @@ namespace handler {
 
 namespace {
 bool containsLineBreak(const std::string& value) {
-    return value.find('\\n') != std::string::npos ||
-           value.find('\\r') != std::string::npos;
+    return value.find('\n') != std::string::npos ||
+           value.find('\r') != std::string::npos;
 }
 
 std::string snapshotId() {
