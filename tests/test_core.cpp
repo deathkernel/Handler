@@ -25,6 +25,7 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <stdexcept>
 #include <fstream>
 #include <filesystem>
 #include <vector>
@@ -261,6 +262,28 @@ int main() {
         [&] { rollbackCalled = true; return true; });
     assert(!verificationFailure.committed);
     assert(verificationFailure.rolledBack);
+    assert(rollbackCalled);
+
+    rollbackCalled = false;
+    Transaction throwingAction(SafetyMode::Auto);
+    const auto actionException = throwingAction.run(
+        RiskLevel::Low,
+        []() -> bool { throw std::runtime_error("forced action exception"); },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [&] { rollbackCalled = true; return true; });
+    assert(!actionException.committed);
+    assert(actionException.rolledBack);
+    assert(rollbackCalled);
+
+    rollbackCalled = false;
+    Transaction throwingVerification(SafetyMode::Auto);
+    const auto verificationException = throwingVerification.run(
+        RiskLevel::Low,
+        [] { return true; },
+        []() -> VerificationResult { throw std::runtime_error("forced verification exception"); },
+        [&] { rollbackCalled = true; return true; });
+    assert(!verificationException.committed);
+    assert(verificationException.rolledBack);
     assert(rollbackCalled);
 
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
