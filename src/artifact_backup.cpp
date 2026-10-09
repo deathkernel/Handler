@@ -25,6 +25,7 @@ std::optional<std::uint64_t> contentFingerprint(
             hash *= prime;
         }
     }
+    if (input.bad()) return std::nullopt;
     return hash;
 }
 }
