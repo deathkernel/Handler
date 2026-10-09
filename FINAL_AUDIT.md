@@ -151,3 +151,15 @@ These are deliberate limitations, not completed capabilities:
 - Recovery snapshots protect Handler's captured state/artifacts; they do not imply universal filesystem or operating-system package rollback.
 
 The CI result above verifies the commit named in the link. Any later commit must be evaluated using its own CI status before being described as cross-platform verified.
+
+
+### Additional recovery-boundary review — 2026-10-09
+
+A further code review identified two fail-closed boundary cases and added regression coverage:
+
+- Explicit transaction approval is now passed only to the approved call; nested or re-entrant calls do not inherit a shared approval flag.
+- Recovery-journal transaction IDs containing field delimiters or line breaks are rejected before writing.
+- An existing journal that cannot be read is treated as corrupt/unsafe instead of being mistaken for an empty journal.
+- Regression tests cover nested high-risk execution during an approved transaction, malformed transaction IDs, and unreadable-journal handling.
+
+These follow-up changes are included in PR #15. **Cross-platform verification remains pending until GitHub Actions completes for the latest PR head.**

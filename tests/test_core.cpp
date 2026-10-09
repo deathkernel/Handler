@@ -230,6 +230,16 @@ int main() {
     assert(!blockedJournal.record("START", "must fail"));
     std::filesystem::remove(journalBlockedRoot, testEc);
 
+    // An existing but unreadable journal must fail closed, not look like an empty journal.
+    const auto journalDirectoryPath = std::filesystem::temp_directory_path() / "handler-journal-directory";
+    std::filesystem::remove_all(journalDirectoryPath, testEc);
+    std::filesystem::create_directories(journalDirectoryPath, testEc);
+    assert(!testEc);
+    RecoveryJournal directoryJournal(journalDirectoryPath);
+    assert(directoryJournal.hasCorruptEntries());
+    assert(directoryJournal.hasUnfinishedTransaction());
+    std::filesystem::remove_all(journalDirectoryPath, testEc);
+
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
     std::filesystem::remove(journalTestFile, testEc);
     RecoveryJournal journalTest(journalTestFile);
