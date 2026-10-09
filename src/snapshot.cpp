@@ -24,11 +24,14 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
     std::filesystem::create_directories(root_, ec);
     if (ec) return std::nullopt;
 
-    std::string id = snapshotId();
+    const std::string baseId = snapshotId();
+    std::string id = baseId;
     std::error_code collisionEc;
-    for (unsigned int suffix = 0; std::filesystem::exists(root_ / (id + ".state"), collisionEc); ++suffix) {
+    for (unsigned int suffix = 1;; ++suffix) {
+        const bool exists = std::filesystem::exists(root_ / (id + ".state"), collisionEc);
         if (collisionEc) return std::nullopt;
-        id = snapshotId() + "-" + std::to_string(suffix + 1);
+        if (!exists) break;
+        id = baseId + "-" + std::to_string(suffix);
     }
     const auto path = root_ / (id + ".state");
     std::ofstream out(path, std::ios::trunc);
@@ -42,7 +45,12 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
         << "current_directory=" << state.currentDirectory.string() << '\n'
         << "handler_version=" << state.handlerVersion << '\n';
 
-    if (!out.good()) return std::nullopt;
+    if (!out.good()) {
+        out.close();
+        std::error_code cleanupEc;
+        std::filesystem::remove(path, cleanupEc);
+        return std::nullopt;
+    }
     return SnapshotInfo{id, path};
 }
 
