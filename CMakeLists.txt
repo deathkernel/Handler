@@ -122,3 +122,23 @@ set_tests_properties(handler_cli_safe_risk_check PROPERTIES
 add_test(NAME handler_cli_unknown_command COMMAND handler handler-test-unknown-command)
 set_tests_properties(handler_cli_unknown_command PROPERTIES
     WILL_FAIL TRUE)
+
+# CLI regression checks for project inspection and guarded failure paths.
+add_test(NAME handler_cli_dependency_inspection COMMAND handler deps)
+set_tests_properties(handler_cli_dependency_inspection PROPERTIES
+    PASS_REGULAR_EXPRESSION "Dependency inspection")
+
+add_test(NAME handler_cli_missing_dependency_upgrade COMMAND handler deps --upgrade handler-nonexistent-package-for-test)
+set_tests_properties(handler_cli_missing_dependency_upgrade PROPERTIES
+    WILL_FAIL TRUE
+    PASS_REGULAR_EXPRESSION "Dependency upgrade blocked: package is not declared")
+
+add_test(NAME handler_cli_unknown_snapshot_rollback COMMAND handler rollback handler-missing-snapshot-for-test)
+set_tests_properties(handler_cli_unknown_snapshot_rollback PROPERTIES
+    WILL_FAIL TRUE
+    PASS_REGULAR_EXPRESSION "Rollback blocked: snapshot not found")
+
+add_test(NAME handler_cli_invalid_repair_target COMMAND handler repair invalid-target handler-test-package)
+set_tests_properties(handler_cli_invalid_repair_target PROPERTIES
+    WILL_FAIL TRUE
+    PASS_REGULAR_EXPRESSION "Unknown repair target")
