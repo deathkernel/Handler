@@ -229,7 +229,7 @@ int main() {
         RiskLevel::Low,
         [] { return false; },
         [] { return VerificationResult{true, "unused", "unused"}; },
-        [&] { rollbackCalled = true; });
+        [&] { rollbackCalled = true; return true; });
     assert(!actionFailure.committed);
     assert(actionFailure.rolledBack);
     assert(rollbackCalled);
@@ -240,7 +240,7 @@ int main() {
         RiskLevel::Low,
         [] { return true; },
         [] { return VerificationResult{false, "integration test", "forced failure"}; },
-        [&] { rollbackCalled = true; });
+        [&] { rollbackCalled = true; return true; });
     assert(!verificationFailure.committed);
     assert(verificationFailure.rolledBack);
     assert(rollbackCalled);
