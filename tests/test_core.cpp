@@ -567,6 +567,10 @@ int main() {
     assert(!snapshots.find("../outside").has_value());
     SnapshotInfo traversal{"../outside", tempRoot / ".." / "outside.state"};
     assert(!snapshots.load(traversal).has_value());
+
+    // A snapshot ID and path must refer to the same file, even within the trusted root.
+    SnapshotInfo mismatchedSnapshot{snapshot->id, secondSnapshot->path};
+    assert(!snapshots.load(mismatchedSnapshot).has_value());
     {
         std::ofstream corruptSnapshot(snapshot->path, std::ios::trunc);
         corruptSnapshot << "timestamp_utc=test\n"

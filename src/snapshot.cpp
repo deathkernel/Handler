@@ -83,7 +83,8 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
     const auto canonicalRoot = std::filesystem::weakly_canonical(root_, ec);
     if (ec) return std::nullopt;
     const auto canonicalPath = std::filesystem::weakly_canonical(snapshot.path, ec);
-    if (ec || canonicalPath.parent_path() != canonicalRoot)
+    if (ec || canonicalPath.parent_path() != canonicalRoot ||
+        canonicalPath.filename() != snapshot.id + ".state")
         return std::nullopt;
 
     std::ifstream in(canonicalPath);

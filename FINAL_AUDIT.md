@@ -163,3 +163,10 @@ A further code review identified two fail-closed boundary cases and added regres
 - Regression tests cover nested high-risk execution during an approved transaction, malformed transaction IDs, and unreadable-journal handling.
 
 These follow-up changes are included in PR #15. **Cross-platform verification remains pending until GitHub Actions completes for the latest PR head.**
+
+
+### Snapshot identity consistency — 2026-10-09
+
+- Snapshot loading now rejects a SnapshotInfo whose ID does not match the canonical filename, even when the supplied path points to another valid snapshot inside the trusted snapshot directory.
+- Added a regression test for mismatched in-root snapshot IDs and paths.
+- Latest cross-platform CI is still required before declaring Stage A complete.
