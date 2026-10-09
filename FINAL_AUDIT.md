@@ -122,6 +122,21 @@ The audit was refreshed for the Handler 0.9.0 codebase; the additional regressio
 - **CLI integration coverage:** CTest exercises version/help/default invocation, safe risk classification, unknown commands, dependency inspection, undeclared dependency-upgrade rejection, unknown-snapshot rollback rejection, invalid repair-target rejection, and missing-argument usage paths. A CMake helper verifies both nonzero exit status and expected diagnostic text for guarded failure cases. Core tests cover transaction rollback status, journal corruption/fail-closed behavior, artifact/snapshot integrity, and dependency version-selection edge cases including caret, tilde, exclusions, and unsatisfiable ranges.
 - **Security hardening:** PR #14 was merged into `main`; transaction rollback regression tests from the superseded PR #5 were retained and pass in CI.
 
+### Stage A recovery and regression updates — 2026-10-09
+
+The current PR branch also includes the following changes; these are **not considered verified until CI completes for the current head**:
+
+- Transaction action and verification exceptions are caught and trigger a rollback attempt.
+- Rollback callback exceptions and false returns are treated as rollback failure; the transaction is recorded as `RECOVERY_REQUIRED` instead of falsely closing the recovery record.
+- `runApproved` clears its one-shot approval state after normal return and when an exception propagates.
+- Recovery-journal details escape carriage returns and newlines so a detail string cannot inject extra physical records.
+- Failed snapshot creation is represented as an active journal stage until a terminal outcome is recorded.
+- Snapshot IDs use a stable per-create base and suffix collisions without overwriting an existing snapshot.
+- Snapshot creation flushes and checks stream close status and removes a partial file if persistence fails.
+- Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, multiline journal details, failed snapshots, and multiple snapshots created within one timestamp interval.
+
+Current PR head: `957df0bf7e2b55d6a4c888c9c95ae8ddc9997a32` at the time of this audit refresh. The latest CI result must be checked against the actual PR head before merging.
+
 ### Known implementation boundaries
 
 These are deliberate limitations, not completed capabilities:
