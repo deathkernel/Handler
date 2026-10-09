@@ -6,6 +6,12 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <algorithm>
+#include <cwctype>
+#include <cstdlib>
+#include <vector>
+#include "handler/state_paths.h"
+#include "handler/executable_trust.h"
 #ifndef _WIN32
 #include <sys/types.h>
 #include <cerrno>
@@ -97,6 +103,8 @@ ActionResult executeCommand(const CommandSpec& command) {
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
 
     std::filesystem::path executablePath = command.executablePath;
+    bool useCommandInterpreter = false;
+    std::filesystem::path batchExecutable;
     if (!executablePath.empty()) {
         std::error_code ec;
         const auto absolute = std::filesystem::absolute(executablePath, ec);
@@ -111,22 +119,79 @@ ActionResult executeCommand(const CommandSpec& command) {
                 ? (filename == "python.exe")
                 : (command.executable == "node" || command.executable == "node.exe")
                     ? (filename == "node.exe")
-                    : false;
+                    : (command.executable == "git")
+                        ? (filename == "git.exe")
+                        : (command.executable == "cmake")
+                            ? (filename == "cmake.exe")
+                            : (command.executable == "dotnet" || command.executable == "dotnet.exe")
+                                ? (filename == "dotnet.exe")
+                                : (command.executable == "npm" || command.executable == "npm.cmd")
+                                    ? (filename == "npm.cmd" || filename == "npm.exe")
+                                    : (command.executable == "winget" || command.executable == "winget.exe")
+                                        ? (filename == "winget.exe")
+                                        : (command.executable == "where")
+                                            ? (filename == "where.exe")
+                                            : false;
         if (!validPath)
             return {false, -1, {}, "configured executable path does not match the allowlisted tool"};
 
-        executablePath = absolute;
+        std::error_code trustEc;
+        const auto canonical = std::filesystem::weakly_canonical(absolute, trustEc);
+        if (trustEc)
+            return {false, -1, {}, "configured executable path could not be canonicalized"};
+
+        bool trusted = isTrustedExecutablePath(canonical);
+        if (!trusted && isHandlerStatePath(canonical))
+            trusted = true;
+        if (!trusted &&
+            (command.executable == "python" || command.executable == "python.exe") &&
+            canonical.filename() == std::filesystem::path("python.exe")) {
+            const auto scripts = canonical.parent_path();
+            const auto environment = scripts.parent_path().filename().string();
+            trusted = scripts.filename() == std::filesystem::path("Scripts") &&
+                      (environment == ".venv" || environment == "venv");
+        }
+        if (!trusted)
+            return {false, -1, {}, "configured executable path is outside Handler trusted roots"};
+
+        executablePath = canonical;
+        if (_wcsicmp(canonical.filename().wstring().c_str(), L"npm.cmd") == 0) {
+            useCommandInterpreter = true;
+            batchExecutable = canonical;
+            const char* windir = std::getenv("WINDIR");
+            if (!windir || !*windir)
+                return {false, -1, {}, "WINDIR is unavailable for npm command interpreter"};
+            executablePath = std::filesystem::path(windir) / "System32" / "cmd.exe";
+            if (!isTrustedExecutablePath(executablePath))
+                return {false, -1, {}, "trusted command interpreter was not found"};
+        }
     } else {
         wchar_t resolved[MAX_PATH]{};
         const std::wstring executable = toWide(command.executable);
         if (executable.empty())
             return {false, -1, {}, "executable is not valid UTF-8"};
 
-        if (SearchPathW(nullptr, executable.c_str(), L".exe",
-                        MAX_PATH, resolved, nullptr) == 0)
+        DWORD length = 0;
+        if (command.executable == "npm" || command.executable == "npm.cmd")
+            length = SearchPathW(nullptr, L"npm.cmd", nullptr, MAX_PATH, resolved, nullptr);
+        else
+            length = SearchPathW(nullptr, executable.c_str(), L".exe", MAX_PATH, resolved, nullptr);
+        if (length == 0 || length >= MAX_PATH)
             return {false, -1, {}, "allowlisted executable was not found on PATH"};
 
         executablePath = std::filesystem::path(resolved);
+        if (!isTrustedExecutablePath(executablePath))
+            return {false, -1, {}, "resolved executable is outside Handler trusted installation roots"};
+        if (_wcsicmp(executablePath.filename().wstring().c_str(), L"npm.cmd") == 0) {
+            useCommandInterpreter = true;
+            batchExecutable = executablePath;
+            const char* windir = std::getenv("WINDIR");
+            if (!windir || !*windir)
+                return {false, -1, {}, "WINDIR is unavailable for npm command interpreter"};
+            executablePath = std::filesystem::path(windir) / "System32" / "cmd.exe";
+            if (!isTrustedExecutablePath(executablePath))
+                return {false, -1, {}, "trusted command interpreter was not found"};
+        }
     }
 
     if (!command.workingDirectory.empty()) {
@@ -150,23 +215,52 @@ ActionResult executeCommand(const CommandSpec& command) {
         return {false, -1, {}, "failed to protect output pipe"};
     }
 
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-    startup.hStdOutput = writePipe;
-    startup.hStdError = writePipe;
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    startup.StartupInfo.hStdOutput = writePipe;
+    startup.StartupInfo.hStdError = writePipe;
+
+    HANDLE inheritedHandles[] = {writePipe};
+    SIZE_T attributeSize = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeSize);
+    std::vector<unsigned char> attributeBuffer(attributeSize);
+    startup.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeBuffer.data());
+    if (attributeBuffer.empty() ||
+        !InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &attributeSize) ||
+        !UpdateProcThreadAttribute(
+            startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            inheritedHandles, sizeof(inheritedHandles), nullptr, nullptr)) {
+        if (startup.lpAttributeList) DeleteProcThreadAttributeList(startup.lpAttributeList);
+        CloseHandle(readPipe);
+        CloseHandle(writePipe);
+        return {false, -1, {}, "failed to configure child handle allowlist"};
+    }
 
     PROCESS_INFORMATION process{};
-    std::wstring commandLine = buildWideCommandLine(command);
+    std::wstring commandLine;
+    if (useCommandInterpreter) {
+        commandLine = quoteWideArgument(executablePath);
+        commandLine += L" /d /s /c \"";
+        commandLine += quoteWideArgument(batchExecutable);
+        for (const auto& argument : command.arguments) {
+            commandLine.push_back(L' ');
+            commandLine += quoteWideArgument(toWide(argument));
+        }
+        commandLine += L"\"";
+    } else {
+        commandLine = buildWideCommandLine(command);
+    }
     const std::wstring workingDirectory = toWide(command.workingDirectory);
 
     const BOOL created = CreateProcessW(
         executablePath.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW, nullptr,
+        CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr,
         workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
-        &startup, &process);
+        &startup.StartupInfo, &process);
 
+    DeleteProcThreadAttributeList(startup.lpAttributeList);
     CloseHandle(writePipe);
 
     if (!created) {
@@ -175,17 +269,29 @@ ActionResult executeCommand(const CommandSpec& command) {
     }
 
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
-    if (job) {
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-        limits.BasicLimitInformation.LimitFlags =
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        const BOOL configured = SetInformationJobObject(
-            job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
-        const BOOL assigned = configured && AssignProcessToJobObject(job, process.hProcess);
-        if (!assigned) {
-            CloseHandle(job);
-            job = nullptr;
-        }
+    if (!job) {
+        TerminateProcess(process.hProcess, 125);
+        WaitForSingleObject(process.hProcess, 5000);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        CloseHandle(readPipe);
+        return {false, -1, {}, "failed to create process containment job"};
+    }
+
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+    limits.BasicLimitInformation.LimitFlags =
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    const BOOL configured = SetInformationJobObject(
+        job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+    const BOOL assigned = configured && AssignProcessToJobObject(job, process.hProcess);
+    if (!assigned) {
+        TerminateProcess(process.hProcess, 125);
+        WaitForSingleObject(process.hProcess, 5000);
+        CloseHandle(job);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        CloseHandle(readPipe);
+        return {false, -1, {}, "failed to assign process to containment job"};
     }
 
     std::string output;
@@ -245,8 +351,9 @@ std::string shellQuote(const std::string& value) {
     return out;
 }
 
-std::string buildShellCommand(const CommandSpec& command) {
-    std::string line = shellQuote(command.executable);
+std::string buildShellCommand(const CommandSpec& command,
+                              const std::string& executable) {
+    std::string line = shellQuote(executable);
     for (const auto& arg : command.arguments)
         line += " " + shellQuote(arg);
     return line;
@@ -256,6 +363,15 @@ std::string buildShellCommand(const CommandSpec& command) {
 ActionResult executeCommand(const CommandSpec& command) {
     if (!isAllowedExecutable(command.executable))
         return {false, -1, {}, "executable is outside Handler's allowed command set"};
+
+    std::string executablePath = command.executable;
+    if (!command.executablePath.empty()) {
+        std::error_code ec;
+        const auto canonical = std::filesystem::weakly_canonical(command.executablePath, ec);
+        if (ec || !std::filesystem::is_regular_file(canonical, ec))
+            return {false, -1, {}, "configured executable path does not exist"};
+        executablePath = canonical.string();
+    }
 
     if (!command.workingDirectory.empty()) {
         std::error_code ec;
@@ -283,7 +399,7 @@ ActionResult executeCommand(const CommandSpec& command) {
         dup2(outputPipe[1], STDERR_FILENO);
         close(outputPipe[1]);
 
-        const std::string line = buildShellCommand(command);
+        const std::string line = buildShellCommand(command, executablePath);
         execl("/bin/sh", "sh", "-c", line.c_str(), static_cast<char*>(nullptr));
         _exit(127);
     }

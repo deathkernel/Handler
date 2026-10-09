@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Handler VERSION 0.8.0 LANGUAGES CXX)
+project(Handler VERSION 0.9.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,9 +24,11 @@ add_executable(handler
     src/policy.cpp
     src/snapshot.cpp
     src/transaction.cpp
+    src/transaction_lock.cpp
     src/recovery_journal.cpp
     src/command_engine.cpp
     src/action_engine.cpp
+    src/executable_trust.cpp
     src/state_paths.cpp
     src/decision_engine.cpp
     src/recovery.cpp
@@ -76,13 +78,19 @@ add_executable(handler_tests
     src/toolchain_doctor.cpp
     src/component_discovery.cpp
     src/action_engine.cpp
+    src/executable_trust.cpp
     src/history.cpp
     src/artifact_backup.cpp
     src/state_paths.cpp
     src/system_info.cpp
     src/transaction.cpp
+    src/transaction_lock.cpp
     src/recovery_journal.cpp
     src/uninstall.cpp
+    src/project_context.cpp
+    src/verification.cpp
+    src/repair.cpp
+    src/temp_cleaner.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)

@@ -6,6 +6,7 @@
 #include "handler/state_paths.h"
 
 #include <fstream>
+#include <cctype>
 #include <iostream>
 #include <regex>
 #include <string>
@@ -175,12 +176,6 @@ bool depAtomMatches(const DependencyVersion& v,const DepAtom& a) {
     if(a.op=="<=") return !depLess(a.v,v);
     return false;
 }
-bool validDependencyPackage(const std::string& p) {
-    if(p.empty()||p.size()>128) return false;
-    for(unsigned char ch:p)
-        if(!(std::isalnum(ch)||ch=='-'||ch=='_'||ch=='.'||ch=='@'||ch=='/')) return false;
-    return true;
-}
 std::filesystem::path dependencyStateRoot() { return handlerStateRoot(); }
 std::filesystem::path pythonProjectExecutable(const std::filesystem::path& root) {
     for (const auto& name : {std::string(".venv"), std::string("venv")}) {
@@ -193,6 +188,29 @@ std::filesystem::path pythonProjectExecutable(const std::filesystem::path& root)
         if (std::filesystem::is_regular_file(candidate, ec)) return candidate;
     }
     return {};
+}
+
+bool validPythonPackageName(const std::string& p) {
+    if (p.empty() || p.size() > 128) return false;
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(p[i]);
+        if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.') continue;
+        return false;
+    }
+    return true;
+}
+
+bool validNodePackageName(const std::string& p) {
+    if (p.empty() || p.size() > 214) return false;
+    if (p.find(' ') != std::string::npos || p.find('\\') != std::string::npos ||
+        p.find(';') != std::string::npos || p.find('|') != std::string::npos)
+        return false;
+    for (const unsigned char ch : p) {
+        if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' ||
+            ch == '@' || ch == '/') continue;
+        return false;
+    }
+    return p.front() != '/' && p.back() != '/';
 }
 
 std::vector<std::string> registryVersions(const std::string& ecosystem,const std::string& package,
@@ -229,8 +247,19 @@ std::string installedDependencyVersion(const std::string& ecosystem,const std::s
             return depTrim(r.output.substr(begin,end==std::string::npos?r.output.size()-begin:end-begin));
         }
     } else {
-        const std::regex re(R"DELIM("version"\s*:\s*"([^"]+)")DELIM");
-        if(std::regex_search(r.output,m,re)) return m[1].str();
+        const std::string dependencyKey = "\"" + package + "\"";
+        const auto dependencyPos = r.output.find(dependencyKey);
+        if (dependencyPos != std::string::npos) {
+            const auto versionKey = r.output.find("\"version\"", dependencyPos + dependencyKey.size());
+            if (versionKey != std::string::npos) {
+                const auto firstQuote = r.output.find('"', r.output.find(':', versionKey) + 1);
+                if (firstQuote != std::string::npos) {
+                    const auto secondQuote = r.output.find('"', firstQuote + 1);
+                    if (secondQuote != std::string::npos)
+                        return r.output.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+                }
+            }
+        }
     }
     return {};
 }
@@ -288,8 +317,12 @@ std::optional<std::string> selectCompatibleDependencyVersion(
 
 int upgradeDependency(const std::filesystem::path& projectRoot,const std::string& ecosystem,
                       const std::string& package,const std::string& constraint) {
-    if(!validDependencyPackage(package)||(ecosystem!="Python"&&ecosystem!="Node.js")) {
-        std::cerr<<"Dependency upgrade blocked: unsupported package or ecosystem.\n"; return 3;
+    if (ecosystem != "Python" && ecosystem != "Node.js") {
+        std::cerr<<"Dependency upgrade blocked: unsupported ecosystem.\n"; return 3;
+    }
+    if ((ecosystem == "Python" && !validPythonPackageName(package)) ||
+        (ecosystem == "Node.js" && !validNodePackageName(package))) {
+        std::cerr<<"Dependency upgrade blocked: invalid package name.\n"; return 3;
     }
     if (ecosystem == "Python" && pythonProjectExecutable(projectRoot).empty()) {
         std::cerr << "Dependency upgrade blocked: Python project-local .venv or venv is required.\\n"; return 3;
@@ -309,19 +342,34 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
 
     const auto artifactRoot=dependencyStateRoot()/"transactions"/"artifacts"/"dependency-upgrade";
     std::vector<ArtifactBackup> backups;
-    if(ecosystem=="Python")
-        for(const auto& file:{projectRoot/"requirements.txt",projectRoot/"pyproject.toml"})
-            if(auto b=backupArtifact(file,artifactRoot/"python")) backups.push_back(*b);
-    else
-        for(const auto& file:{projectRoot/"package.json",projectRoot/"package-lock.json"})
-            if(auto b=backupArtifact(file,artifactRoot/"node")) backups.push_back(*b);
+    if (ecosystem == "Python") {
+        for (const auto& file : {projectRoot/"requirements.txt", projectRoot/"pyproject.toml"}) {
+            const auto backup = backupArtifact(file, artifactRoot/"python");
+            if (!backup) {
+                std::cerr << "Dependency upgrade blocked: transaction artifact backup failed for "
+                          << file << ".\n";
+                return 1;
+            }
+            backups.push_back(*backup);
+        }
+    } else {
+        for (const auto& file : {projectRoot/"package.json", projectRoot/"package-lock.json"}) {
+            const auto backup = backupArtifact(file, artifactRoot/"node");
+            if (!backup) {
+                std::cerr << "Dependency upgrade blocked: transaction artifact backup failed for "
+                          << file << ".\n";
+                return 1;
+            }
+            backups.push_back(*backup);
+        }
+    }
 
     Transaction tx(SafetyMode::Confirm);
     const auto result=tx.runApproved(RiskLevel::High,
         [&] {
             CommandSpec cmd{"dependency-upgrade",ecosystem=="Python"?"python":"npm",{},RiskLevel::High,180000};
-            if(ecosystem=="Python") { cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check"}; cmd.executablePath=pythonProjectExecutable(projectRoot); }
-            else { cmd.arguments={"install",package+"@"+*selected,"--no-audit","--no-fund"}; cmd.workingDirectory=projectRoot; }
+            if(ecosystem=="Python") { cmd.arguments={"-m","pip","install",package+"=="+*selected,"--disable-pip-version-check","--only-binary=:all:"}; cmd.executablePath=pythonProjectExecutable(projectRoot); }
+            else { cmd.arguments={"install",package+"@"+*selected,"--no-audit","--no-fund","--ignore-scripts"}; cmd.workingDirectory=projectRoot; }
             const auto r=executeCommand(cmd); std::cout<<r.output; return r.started&&r.exitCode==0;
         },
         [&] {
@@ -332,7 +380,42 @@ int upgradeDependency(const std::filesystem::path& projectRoot,const std::string
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            return restored;
+            if (!restored) return false;
+
+            if (ecosystem == "Node.js") {
+                const std::filesystem::path lockfile = projectRoot / "package-lock.json";
+                const bool hasLockfile = std::filesystem::is_regular_file(lockfile);
+                CommandSpec rollback{"dependency-upgrade-rollback", "npm",
+                    hasLockfile
+                        ? std::vector<std::string>{"ci", "--ignore-scripts", "--no-audit", "--no-fund"}
+                        : std::vector<std::string>{"install", "--ignore-scripts", "--no-audit", "--no-fund"},
+                    RiskLevel::High, 180000};
+                rollback.workingDirectory = projectRoot;
+                const auto r = executeCommand(rollback);
+                if (!r.started || r.exitCode != 0) return false;
+                return current.empty()
+                    ? installedDependencyVersion(ecosystem, package, projectRoot).empty()
+                    : installedDependencyVersion(ecosystem, package, projectRoot) == current;
+            }
+
+            if (current.empty()) {
+                CommandSpec rollback{"dependency-upgrade-rollback", "python",
+                    {"-m", "pip", "uninstall", "-y", package, "--disable-pip-version-check"},
+                    RiskLevel::High, 120000};
+                rollback.executablePath = pythonProjectExecutable(projectRoot);
+                const auto r = executeCommand(rollback);
+                if (!r.started || r.exitCode != 0) return false;
+                return installedDependencyVersion(ecosystem, package, projectRoot).empty();
+            }
+
+            CommandSpec rollback{"dependency-upgrade-rollback", "python",
+                {"-m", "pip", "install", package + "==" + current,
+                 "--disable-pip-version-check", "--only-binary=:all:"},
+                RiskLevel::High, 120000};
+            rollback.executablePath = pythonProjectExecutable(projectRoot);
+            const auto r = executeCommand(rollback);
+            if (!r.started || r.exitCode != 0) return false;
+            return installedDependencyVersion(ecosystem, package, projectRoot) == current;
         });
 
     History history(dependencyStateRoot()/"history.log");

@@ -204,7 +204,7 @@ When an update, installation, cleanup, or repair causes a verified regression, H
 Planned capabilities:
 - Last operation undo
 - Snapshot restore
-- Package version rollback
+- Package version rollback (supported Node dependency rollback and Windows winget toolchain rollback)
 - Virtual-environment recreation
 - Configuration restoration
 - Interrupted-recovery recovery

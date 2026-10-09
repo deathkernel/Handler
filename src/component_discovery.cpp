@@ -5,6 +5,9 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <algorithm>
+#include "handler/executable_trust.h"
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -19,12 +22,16 @@ std::string commandPath(const std::string& name) {
     if (candidate.find('.') == std::string::npos) candidate += ".exe";
     char buffer[MAX_PATH]{};
     const DWORD length = SearchPathA(nullptr, candidate.c_str(), nullptr, MAX_PATH, buffer, nullptr);
-    return length ? std::string(buffer, length) : std::string{};
+    if (!length) return {};
+    return isTrustedExecutablePath(std::filesystem::path(std::string(buffer, length))) ? std::string(buffer, length) : std::string{};
 #else
     const char* rawPath = std::getenv("PATH");
     if (!rawPath) return {};
 
     const std::string pathValue(rawPath);
+    std::error_code currentEc;
+    const auto currentRoot = std::filesystem::weakly_canonical(
+        std::filesystem::current_path(), currentEc);
     std::size_t begin = 0;
     while (begin <= pathValue.size()) {
         const auto end = pathValue.find(':', begin);
@@ -33,9 +40,12 @@ std::string commandPath(const std::string& name) {
         if (!entry.empty()) {
             const auto candidate = std::filesystem::path(entry) / name;
             std::error_code ec;
-            if (std::filesystem::is_regular_file(candidate, ec) &&
+            const auto canonical = std::filesystem::weakly_canonical(candidate, ec);
+            if (!ec && std::filesystem::is_regular_file(canonical, ec) &&
                 (ec.value() == 0)) {
-                return std::filesystem::weakly_canonical(candidate, ec).string();
+                if (!currentEc && pathUnder(canonical, currentRoot))
+                    return {};
+                return canonical.string();
             }
         }
         if (end == std::string::npos) break;

@@ -36,18 +36,9 @@ std::filesystem::path repairStateRoot() {
 }
 
 std::filesystem::path pythonExecutableForCurrentContext() {
-    if (const char* v = std::getenv("VIRTUAL_ENV"); v && *v) {
-        const auto root = std::filesystem::path(v);
-#ifdef _WIN32
-        const auto candidate = root / "Scripts" / "python.exe";
-#else
-        const auto candidate = root / "bin" / "python";
-#endif
-        std::error_code ec;
-        if (std::filesystem::is_regular_file(candidate, ec))
-            return candidate;
-    }
-
+    // Do not trust VIRTUAL_ENV directly: it is caller-controlled environment
+    // state and may point Handler at an arbitrary interpreter. Repair is
+    // intentionally restricted to a project-local .venv/venv.
     const auto project = detectProjectContext(std::filesystem::current_path());
     if (!project.root.empty() && project.type == "Python") {
         for (const auto& name : {".venv", "venv"}) {
@@ -72,6 +63,52 @@ std::filesystem::path nodeWorkingDirectory() {
     return {};
 }
 
+std::string installedPythonPackageVersion(const std::filesystem::path& pythonPath,
+                                          const std::string& package) {
+    CommandSpec query{"python-repair-precheck", "python",
+                      {"-m", "pip", "show", package, "--disable-pip-version-check"},
+                      RiskLevel::Low, 30000};
+    query.executablePath = pythonPath;
+    const auto result = executeCommand(query);
+    if (!result.started || result.exitCode != 0) return {};
+
+    const std::string marker = "Version:";
+    const auto pos = result.output.find(marker);
+    if (pos == std::string::npos) return {};
+    const auto begin = pos + marker.size();
+    const auto end = result.output.find_first_of("\r\n", begin);
+    std::string version = result.output.substr(
+        begin, end == std::string::npos ? std::string::npos : end - begin);
+    const auto first = version.find_first_not_of(" \t");
+    const auto last = version.find_last_not_of(" \t");
+    if (first == std::string::npos) return {};
+    return version.substr(first, last - first + 1);
+}
+
+std::string installedNodePackageVersion(const std::filesystem::path& projectRoot,
+                                        const std::string& package) {
+    CommandSpec query{"node-repair-precheck", "npm",
+                      {"ls", package, "--depth=0", "--json"},
+                      RiskLevel::Low, 30000};
+    query.workingDirectory = projectRoot;
+    const auto result = executeCommand(query);
+    if (!result.started || result.exitCode != 0) return {};
+
+    const std::string dependencyKey = "\"" + package + "\"";
+    const auto dependencyPos = result.output.find(dependencyKey);
+    if (dependencyPos == std::string::npos) return {};
+
+    const auto versionKey = result.output.find("\"version\"", dependencyPos + dependencyKey.size());
+    if (versionKey == std::string::npos) return {};
+    const auto colon = result.output.find(':', versionKey);
+    if (colon == std::string::npos) return {};
+    const auto begin = result.output.find('"', colon + 1);
+    if (begin == std::string::npos) return {};
+    const auto endQuote = result.output.find('"', begin + 1);
+    if (endQuote == std::string::npos) return {};
+    return result.output.substr(begin + 1, endQuote - begin - 1);
+}
+
 } // namespace
 
 int repairPythonModule(const char* rawPackage) {
@@ -90,11 +127,7 @@ int repairPythonModule(const char* rawPackage) {
     std::cout << "Python repair requested for: " << package << "\n"
               << "Target interpreter: " << target << "\n";
 
-    CommandSpec precheck{"python-repair-precheck", "python",
-                         {"-m", "pip", "show", package}, RiskLevel::Low, 30000};
-    precheck.executablePath = pythonPath;
-    const auto before = executeCommand(precheck);
-    const bool wasInstalled = before.started && before.exitCode == 0;
+    const std::string previousVersion = installedPythonPackageVersion(pythonPath, package);
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
@@ -113,13 +146,18 @@ int repairPythonModule(const char* rawPackage) {
     for (const auto& file : {std::filesystem::path("requirements.txt"),
                              std::filesystem::path("pyproject.toml")}) {
         const auto backup = backupArtifact(file, artifactRoot / "python");
-        if (backup) backups.push_back(*backup);
+        if (!backup) {
+            std::cerr << "Python repair blocked: transaction artifact backup failed for "
+                      << file << ".\n";
+            return 1;
+        }
+        backups.push_back(*backup);
     }
     const auto result = tx.runApproved(
         RiskLevel::High,
         [&] {
             CommandSpec install{"python-repair", "python",
-                {"-m", "pip", "install", package, "--disable-pip-version-check"},
+                {"-m", "pip", "install", package, "--disable-pip-version-check", "--only-binary=:all:"},
                 RiskLevel::High, 180000};
             install.executablePath = pythonPath;
             const auto r = executeCommand(install);
@@ -144,13 +182,23 @@ int repairPythonModule(const char* rawPackage) {
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            if (wasInstalled) return restored;
+            if (!restored) return false;
+
+            if (previousVersion.empty()) {
+                CommandSpec rollback{"python-repair-rollback", "python",
+                    {"-m", "pip", "uninstall", "-y", package,
+                     "--disable-pip-version-check"}, RiskLevel::High, 120000};
+                rollback.executablePath = pythonPath;
+                const auto result = executeCommand(rollback);
+                return result.started && result.exitCode == 0;
+            }
+
             CommandSpec rollback{"python-repair-rollback", "python",
-                {"-m", "pip", "uninstall", "-y", package,
-                 "--disable-pip-version-check"}, RiskLevel::High, 120000};
+                {"-m", "pip", "install", package + "==" + previousVersion,
+                 "--disable-pip-version-check", "--only-binary=:all:"}, RiskLevel::High, 120000};
             rollback.executablePath = pythonPath;
             const auto result = executeCommand(rollback);
-            return restored && result.started && result.exitCode == 0;
+            return result.started && result.exitCode == 0;
         });
 
     History history(repairStateRoot() / "history.log");
@@ -184,11 +232,7 @@ int repairNodeModule(const char* rawPackage) {
     std::cout << "Node repair requested for: " << package << "\n"
               << "Target project: " << projectRoot << "\n";
 
-    CommandSpec precheck{"node-repair-precheck", "npm",
-                         {"ls", package, "--depth=0"}, RiskLevel::Low, 30000};
-    precheck.workingDirectory = projectRoot;
-    const auto before = executeCommand(precheck);
-    const bool wasInstalled = before.started && before.exitCode == 0;
+    const std::string previousVersion = installedNodePackageVersion(projectRoot, package);
 
     const auto policy = evaluatePolicy(SafetyMode::Confirm, RiskLevel::High);
     if (policy.requiresConfirmation) {
@@ -206,13 +250,18 @@ int repairNodeModule(const char* rawPackage) {
     std::vector<ArtifactBackup> backups;
     for (const auto& file : {projectRoot / "package.json", projectRoot / "package-lock.json"}) {
         const auto backup = backupArtifact(file, artifactRoot / "node");
-        if (backup) backups.push_back(*backup);
+        if (!backup) {
+            std::cerr << "Node repair blocked: transaction artifact backup failed for "
+                      << file << ".\n";
+            return 1;
+        }
+        backups.push_back(*backup);
     }
     const auto result = tx.runApproved(
         RiskLevel::High,
         [&] {
             CommandSpec install{"node-repair", "npm",
-                {"install", package, "--no-audit", "--no-fund"},
+                {"install", package, "--no-audit", "--no-fund", "--ignore-scripts"},
                 RiskLevel::High, 180000};
             install.workingDirectory = projectRoot;
             const auto r = executeCommand(install);
@@ -230,13 +279,19 @@ int repairNodeModule(const char* rawPackage) {
         [&] {
             bool restored = true;
             for (const auto& backup : backups) restored = restoreArtifact(backup) && restored;
-            if (wasInstalled) return restored;
+            if (!restored) return false;
+
+            const bool hasLockfile = std::filesystem::is_regular_file(
+                projectRoot / "package-lock.json");
             CommandSpec rollback{"node-repair-rollback", "npm",
-                {"uninstall", package, "--no-audit", "--no-fund"},
-                RiskLevel::High, 120000};
+                hasLockfile
+                    ? std::vector<std::string>{"ci", "--ignore-scripts", "--no-audit", "--no-fund"}
+                    : std::vector<std::string>{"install", "--ignore-scripts", "--no-audit", "--no-fund"},
+                RiskLevel::High, 180000};
             rollback.workingDirectory = projectRoot;
             const auto result = executeCommand(rollback);
-            return restored && result.started && result.exitCode == 0;
+            if (!result.started || result.exitCode != 0) return false;
+            return installedNodePackageVersion(projectRoot, package) == previousVersion;
         });
 
     History history(repairStateRoot() / "history.log");

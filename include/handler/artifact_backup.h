@@ -12,6 +12,7 @@ struct ArtifactBackup {
     bool existed{false};
     std::uintmax_t originalSize{0};
     std::uintmax_t backupSize{0};
+    std::uint64_t contentHash{0};
 };
 
 std::optional<ArtifactBackup> backupArtifact(

@@ -24,6 +24,7 @@
 #include "handler/recovery_journal.h"
 #include "handler/snapshot.h"
 #include "handler/transaction.h"
+#include "handler/transaction_lock.h"
 #include "handler/verification.h"
 #include "handler/router.h"
 #include "handler/state_store.h"
@@ -31,6 +32,7 @@
 #include "handler/temp_cleaner.h"
 #include "handler/repair.h"
 #include "handler/auto_recovery.h"
+#include "handler/state_paths.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -41,14 +43,10 @@
 #include <vector>
 
 namespace {
-constexpr const char* kVersion = "0.8.0";
+constexpr const char* kVersion = "0.9.0";
 
 std::filesystem::path stateRoot() {
-    if (const char* p = std::getenv("LOCALAPPDATA"); p && *p)
-        return std::filesystem::path(p) / "Handler";
-    if (const char* p = std::getenv("USERPROFILE"); p && *p)
-        return std::filesystem::path(p) / ".handler";
-    return std::filesystem::current_path() / ".handler";
+    return handler::handlerStateRoot();
 }
 
 handler::History makeHistory() {
@@ -98,6 +96,8 @@ int runSafeMode() {
 }
 
 handler::ProjectContext currentProject();
+std::filesystem::path transactionRoot();
+bool mutationBlockedByInterruptedTransaction();
 
 int runUninstall(const std::string& ecosystemName, const std::string& package,
                bool dryRun) {
@@ -139,6 +139,8 @@ int runUninstall(const std::string& ecosystemName, const std::string& package,
         std::cout << "Dry run: no package or project files were modified.\n";
         return 0;
     }
+
+    if (mutationBlockedByInterruptedTransaction()) return 1;
 
     std::cout << "This will remove the package from the current project environment. "
                  "Handler will back up the manifest/lockfile and retain a recovery snapshot. [y/N]: ";
@@ -576,18 +578,73 @@ int runTempCleanup(bool dryRun = false) {
 
     std::cout << (dryRun ? "Previewing: " : "Cleaning: ")
               << health.tempPath << "\n";
+
+    if (dryRun) {
+        const auto result = handler::cleanTempDirectory(
+            std::filesystem::path(health.tempPath), true);
+        handler::printCleanupResult(result);
+        makeHistory().record("TEMP_CLEANUP",
+            "files=" + std::to_string(result.filesRemoved) +
+            ", skipped=" + std::to_string(result.skipped) +
+            ", dry_run=true");
+        return 0;
+    }
+
+    if (mutationBlockedByInterruptedTransaction()) return 1;
+
+    handler::TransactionLock cleanupLock(transactionRoot() / "transaction.lock");
+    if (!cleanupLock.acquire()) {
+        std::cerr << "TEMP cleanup blocked: another Handler transaction is active.\n";
+        return 1;
+    }
+
+    handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
+    const auto transactionId = handler::RecoveryJournal::newTransactionId();
+    if (!journal.record(transactionId, "START", "TEMP cleanup transaction started")) {
+        std::cerr << "TEMP cleanup blocked: recovery journal unavailable.\n";
+        return 1;
+    }
+    if (!journal.record(transactionId, "ACTION_BEGIN", "TEMP cleanup mutation started")) {
+        std::cerr << "TEMP cleanup blocked: recovery journal could not record mutation start.\n";
+        return 1;
+    }
+
     const auto result = handler::cleanTempDirectory(
-        std::filesystem::path(health.tempPath), dryRun);
+        std::filesystem::path(health.tempPath), false);
     handler::printCleanupResult(result);
+
+    const bool completed = journal.record(
+        transactionId,
+        result.lockedSkipped == 0 ? "COMMIT" : "RECOVERY_REQUIRED",
+        "TEMP cleanup completed; files=" + std::to_string(result.filesRemoved) +
+            ", skipped=" + std::to_string(result.skipped));
     makeHistory().record("TEMP_CLEANUP",
         "files=" + std::to_string(result.filesRemoved) +
         ", skipped=" + std::to_string(result.skipped) +
-        ", dry_run=" + std::string(dryRun ? "true" : "false"));
+        ", dry_run=false");
+
+    if (!completed) {
+        std::cerr << "TEMP cleanup completed, but recovery journal persistence failed; "
+                     "review recovery state before further mutations.\n";
+        return 1;
+    }
+    if (result.lockedSkipped != 0) {
+        std::cerr << "TEMP cleanup completed partially; recovery review is required.\n";
+        return 1;
+    }
     return 0;
 }
 
 std::filesystem::path transactionRoot() {
     return stateRoot() / "transactions";
+}
+
+bool mutationBlockedByInterruptedTransaction() {
+    handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
+    if (!journal.hasUnfinishedTransaction()) return false;
+    std::cerr << "Operation blocked: an interrupted transaction requires recovery review. "
+                 "Run 'handler history' and inspect the transaction journal before retrying.\n";
+    return true;
 }
 
 int runSnapshots() {
@@ -629,12 +686,31 @@ int runRollback(const std::string& id) {
         return 0;
     }
 
+    handler::TransactionLock recoveryLock(transactionRoot() / "transaction.lock");
+    if (!recoveryLock.acquire()) {
+        std::cerr << "Rollback blocked: another Handler transaction is active.\n";
+        return 1;
+    }
+
     if (!makeStateStore().saveCurrent(*state)) {
         std::cerr << "Rollback failed: could not restore saved Handler state.\n";
         return 1;
     }
     handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
-    journal.record("MANUAL_ROLLBACK", id);
+    const auto unfinished = journal.unfinishedTransactionIds();
+    bool journalUpdated = false;
+    if (unfinished.size() == 1 && !unfinished.front().empty())
+        journalUpdated = journal.record(unfinished.front(), "MANUAL_ROLLBACK", id);
+    else if (unfinished.empty())
+        journalUpdated = journal.record("MANUAL_ROLLBACK", id);
+    else {
+        std::cerr << "Rollback applied, but recovery journal has multiple active transactions; manual recovery review is required before further mutations.\n";
+        return 1;
+    }
+    if (!journalUpdated) {
+        std::cerr << "Rollback applied, but recovery journal could not be updated; retry recovery review before further mutations.\n";
+        return 1;
+    }
     makeHistory().record("ROLLBACK_APPLIED",
                          id + " | Handler baseline restored");
     std::cout << "Handler baseline restored from snapshot " << id << ".\n";
@@ -816,15 +892,18 @@ int main(int argc, char* argv[]) {
         return runEnvironmentAudit(argv[2]);
     }
     if (command == "env-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler env-repair <file> [--user]\\n"; return 2; }
         return runEnvironmentRepair(argv[2], argc >= 4 && std::string(argv[3]) == "--user");
     }
     if (command == "path-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler path-repair <baseline-file>\\n"; return 2; }
         return runPathRepair(argv[2]);
     }
     if (command == "protect") return runProtection();
     if (command == "uninstall") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 4) {
             std::cerr << "Usage: handler uninstall <python|node> <package> [--dry-run]\n";
             return 2;
@@ -832,10 +911,14 @@ int main(int argc, char* argv[]) {
         return runUninstall(argv[2], argv[3], argc >= 5 && std::string(argv[4]) == "--dry-run");
     }
     if (command == "toolchain-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\\n"; return 2; }
         return runToolchainRepair(argv[2]);
     }
-    if (command == "doctor-repair") return runDoctorRepair();
+    if (command == "doctor-repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
+        return runDoctorRepair();
+    }
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
     if (command == "risk") {
@@ -850,6 +933,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "recover") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) {
             std::cerr << "Usage: handler recover <error text>\n";
             return 2;
@@ -858,6 +942,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "repair") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 4) {
             std::cerr << "Usage: handler repair <python-module|node-module> <package>\n";
             return 2;
@@ -912,8 +997,12 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "project") return runProject();
-    if (command == "deps") return runDeps(argc, argv);
+    if (command == "deps") {
+        if (argc >= 4 && std::string(argv[2]) == "--upgrade" && mutationBlockedByInterruptedTransaction()) return 1;
+        return runDeps(argc, argv);
+    }
     if (command == "dependency-upgrade") {
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
         const auto context = currentProject();
         if (context.root.empty()) { std::cerr << "No supported project detected.\n"; return 1; }
