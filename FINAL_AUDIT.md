@@ -133,7 +133,7 @@ The current PR branch also includes the following changes; these are **not consi
 - Failed snapshot creation is represented as an active journal stage until a terminal outcome is recorded.
 - Snapshot IDs use a stable per-create base and suffix collisions without overwriting an existing snapshot.
 - Snapshot creation flushes and checks stream close status and removes a partial file if persistence fails.
-- Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, multiline journal details, failed snapshots, and multiple snapshots created within one timestamp interval.
+- Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, one-shot approval not leaking to a later high-risk transaction, multiline journal details, failed snapshots, and multiple snapshots created within one timestamp interval.
 
 The documentation refresh itself creates a new PR head; use the live [PR #15 page](https://github.com/deathkernel/Handler/pull/15) to identify the exact current SHA. The latest CI result must match that SHA before merging.
 
