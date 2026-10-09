@@ -18,7 +18,7 @@ Audit scope:
 
 - Snapshot IDs/path handling was hardened against traversal and malformed IDs; regression coverage was added.
 - Snapshot filename collisions are handled without overwriting an existing snapshot.
-- Environment state capture now reports the 0.8.0 release version and uses portable Unix hostname/user/TMPDIR fallbacks.
+- Environment state capture reports Handler 0.9.0 and uses portable Unix hostname/user/TMPDIR fallbacks.
 - Toolchain Doctor now uses an explicitly approved transaction path rather than a second unfulfilled confirmation gate.
 - Transaction rollback callbacks now return a real success/failure result instead of being treated as successful merely because a callback existed.
 - Python dependency upgrades require a project-local .venv/venv instead of modifying a global interpreter.
@@ -111,3 +111,25 @@ The repository is release-oriented within its documented scope, but the limitati
 
 - Environment-state capture now reports Handler 0.9.0 instead of the stale 0.8.0 value.
 - Added regression coverage so future release-version changes cannot silently leave captured state metadata stale.
+
+
+## Audit refresh — 2026-10-09
+
+The audit and regression coverage were refreshed against the current `main` branch.
+
+- **Current version:** Handler 0.9.0, consistent across `CMakeLists.txt`, CLI `handler version`, and captured environment-state metadata.
+- **Latest cross-platform CI:** [Build Handler run 37918735056](https://github.com/deathkernel/Handler/actions/runs/37918735056), commit `1ebbcdef796418579c0f639b41fab610cece7a9f`. Ubuntu, macOS, and Windows build and test jobs all completed successfully.
+- **CLI integration coverage:** CTest exercises version/help/default invocation, safe risk classification, unknown commands, dependency inspection, undeclared dependency-upgrade rejection, unknown-snapshot rollback rejection, and invalid repair-target rejection. Core tests continue to cover transaction rollback status, journal corruption/fail-closed behavior, artifact/snapshot integrity, and dependency version-selection edge cases.
+- **Security hardening:** PR #14 was merged into `main`; transaction rollback regression tests from the superseded PR #5 were retained and pass in CI.
+
+### Known implementation boundaries
+
+These are deliberate limitations, not completed capabilities:
+
+- Automatic toolchain repair is enabled only for supported installed-tool targets through winget on Windows. Linux/macOS automatic toolchain package repair remains disabled.
+- Dependency resolution is a lightweight constraint/version selector, not a complete lockfile-aware SAT solver.
+- npm install/rollback paths intentionally skip lifecycle scripts; Python repair/rollback is restricted to binary wheels where specified.
+- Deep cleanup remains a low-level foundation and is not exposed as a supported CLI command.
+- Recovery snapshots protect Handler's captured state/artifacts; they do not imply universal filesystem or operating-system package rollback.
+
+The CI result above verifies the commit named in the link. Any later commit must be evaluated using its own CI status before being described as cross-platform verified.
