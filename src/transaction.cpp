@@ -21,6 +21,18 @@ bool invokeRollbackSafely(const Transaction::Rollback& rollback) noexcept {
     }
 }
 
+void recordRollbackOutcome(const RecoveryJournal& journal,
+                           const std::string& transactionId,
+                           bool rollbackOk,
+                           const std::string& successDetails,
+                           const std::string& failureDetails) {
+    if (rollbackOk) {
+        journal.record(transactionId, "ROLLBACK", successDetails);
+    } else {
+        journal.record(transactionId, "RECOVERY_REQUIRED", failureDetails);
+    }
+}
+
 } // namespace
 
 Transaction::Transaction(SafetyMode mode) : mode_(mode) {}
@@ -67,20 +79,26 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
         actionOk = action();
     } catch (...) {
         const bool rollbackOk = invokeRollbackSafely(rollback);
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "action threw an exception; rollback verified by callback" : "action threw an exception; rollback failed or unavailable");
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "action threw an exception; rollback verified by callback",
+                              "action threw an exception; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{}, "action threw an exception; rollback invoked"};
     }
     if (!actionOk) {
         const bool rollbackOk = invokeRollbackSafely(rollback);
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "action failed; rollback verified by callback" : "action failed; rollback failed or unavailable");
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "action failed; rollback verified by callback",
+                              "action failed; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{}, "action failed; rollback invoked"};
     }
 
     if (!journal.record(transactionId, "VERIFY_BEGIN", "transaction verification started")) {
         const bool rollbackOk = invokeRollbackSafely(rollback);
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "journal failure; rollback verified by callback" : "journal failure; rollback failed or unavailable");
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "journal failure; rollback verified by callback",
+                              "journal failure; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "verification aborted: recovery journal unavailable"};
     }
 
@@ -89,14 +107,18 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
         verification = verify();
     } catch (...) {
         const bool rollbackOk = invokeRollbackSafely(rollback);
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "verification threw an exception; rollback verified by callback" : "verification threw an exception; rollback failed or unavailable");
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "verification threw an exception; rollback verified by callback",
+                              "verification threw an exception; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{},
                 "verification threw an exception; rollback invoked"};
     }
     if (!verification.passed) {
         const bool rollbackOk = invokeRollbackSafely(rollback);
-        journal.record(transactionId, "ROLLBACK", rollbackOk ? "verification failed; rollback verified by callback" : "verification failed; rollback failed or unavailable");
+        recordRollbackOutcome(journal, transactionId, rollbackOk,
+                              "verification failed; rollback verified by callback",
+                              "verification failed; recovery is required because rollback failed or was unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{},
                 "verification failed; rollback invoked"};
