@@ -128,17 +128,26 @@ add_test(NAME handler_cli_dependency_inspection COMMAND handler deps)
 set_tests_properties(handler_cli_dependency_inspection PROPERTIES
     PASS_REGULAR_EXPRESSION "Dependency inspection")
 
-add_test(NAME handler_cli_missing_dependency_upgrade COMMAND handler deps --upgrade handler-nonexistent-package-for-test)
-set_tests_properties(handler_cli_missing_dependency_upgrade PROPERTIES
-    WILL_FAIL TRUE)
+add_test(NAME handler_cli_missing_dependency_upgrade
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=deps;--upgrade;handler-nonexistent-package-for-test"
+        "-DEXPECTED=Dependency upgrade blocked: package is not declared"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_unknown_snapshot_rollback COMMAND handler rollback handler-missing-snapshot-for-test)
-set_tests_properties(handler_cli_unknown_snapshot_rollback PROPERTIES
-    WILL_FAIL TRUE)
+add_test(NAME handler_cli_unknown_snapshot_rollback
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=rollback;handler-missing-snapshot-for-test"
+        "-DEXPECTED=Rollback blocked: snapshot not found"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_invalid_repair_target COMMAND handler repair invalid-target handler-test-package)
-set_tests_properties(handler_cli_invalid_repair_target PROPERTIES
-    WILL_FAIL TRUE)
+add_test(NAME handler_cli_invalid_repair_target
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=repair;invalid-target;handler-test-package"
+        "-DEXPECTED=Unknown repair target"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
 add_test(NAME handler_cli_repair_missing_arguments COMMAND handler repair)
 set_tests_properties(handler_cli_repair_missing_arguments PROPERTIES
