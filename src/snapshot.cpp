@@ -10,6 +10,11 @@
 namespace handler {
 
 namespace {
+bool containsLineBreak(const std::string& value) {
+    return value.find('\\n') != std::string::npos ||
+           value.find('\\r') != std::string::npos;
+}
+
 std::string snapshotId() {
     const auto now = std::chrono::system_clock::now();
     const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -21,6 +26,17 @@ std::string snapshotId() {
 SnapshotStore::SnapshotStore(std::filesystem::path root) : root_(std::move(root)) {}
 
 std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state) const {
+    // Snapshot records are line-oriented key/value pairs. Reject values that
+    // could inject additional fields or make the snapshot impossible to parse.
+    if (containsLineBreak(state.timestampUtc) ||
+        containsLineBreak(state.computerName) ||
+        containsLineBreak(state.userName) ||
+        containsLineBreak(state.tempPath) ||
+        containsLineBreak(state.pathValue) ||
+        containsLineBreak(state.currentDirectory.string()) ||
+        containsLineBreak(state.handlerVersion))
+        return std::nullopt;
+
     std::error_code ec;
     std::filesystem::create_directories(root_, ec);
     if (ec) return std::nullopt;
