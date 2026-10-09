@@ -80,7 +80,7 @@ GitHub Actions run #548 completed successfully on Ubuntu, Windows, and macOS; al
 
 ## Audit conclusion
 
-The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The previously verified CI run #548 is green across all three supported CI operating systems; the latest transaction-recovery changes remain gated on their newer CI run.
+The repository is release-oriented within its documented scope, but the limitations above must remain explicit. The baseline main-branch CI run 37918735056 passed on Ubuntu, macOS, and Windows. The newer CLI/dependency regression changes on PR #15 require their own CI run to pass before merge.
 
 - Unix Doctor port diagnostics now report `UNKNOWN` when probing is unsupported instead of implying the port is free.
 
@@ -119,7 +119,7 @@ The audit was refreshed for the Handler 0.9.0 codebase; the additional regressio
 
 - **Current version:** Handler 0.9.0, consistent across `CMakeLists.txt`, CLI `handler version`, and captured environment-state metadata.
 - **Latest cross-platform CI:** [Build Handler run 37918735056](https://github.com/deathkernel/Handler/actions/runs/37918735056), commit `1ebbcdef796418579c0f639b41fab610cece7a9f`. Ubuntu, macOS, and Windows build and test jobs all completed successfully.
-- **CLI integration coverage:** CTest exercises version/help/default invocation, safe risk classification, unknown commands, dependency inspection, undeclared dependency-upgrade rejection, unknown-snapshot rollback rejection, and invalid repair-target rejection. Core tests continue to cover transaction rollback status, journal corruption/fail-closed behavior, artifact/snapshot integrity, and dependency version-selection edge cases.
+- **CLI integration coverage:** CTest exercises version/help/default invocation, safe risk classification, unknown commands, dependency inspection, undeclared dependency-upgrade rejection, unknown-snapshot rollback rejection, invalid repair-target rejection, and missing-argument usage paths. A CMake helper verifies both nonzero exit status and expected diagnostic text for guarded failure cases. Core tests cover transaction rollback status, journal corruption/fail-closed behavior, artifact/snapshot integrity, and dependency version-selection edge cases including caret, tilde, exclusions, and unsatisfiable ranges.
 - **Security hardening:** PR #14 was merged into `main`; transaction rollback regression tests from the superseded PR #5 were retained and pass in CI.
 
 ### Known implementation boundaries
