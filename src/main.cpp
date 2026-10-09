@@ -96,6 +96,8 @@ int runSafeMode() {
 }
 
 handler::ProjectContext currentProject();
+std::filesystem::path transactionRoot();
+bool mutationBlockedByInterruptedTransaction();
 
 int runUninstall(const std::string& ecosystemName, const std::string& package,
                bool dryRun) {
