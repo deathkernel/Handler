@@ -516,7 +516,7 @@ int main() {
     assert(snapshots.load(*secondSnapshot).has_value());
     assert(snapshots.list().size() == 2);
     auto malformedState = state;
-    malformedState.userName = "user\\ncomputer_name=injected";
+    malformedState.userName = "user\ncomputer_name=injected";
     assert(!snapshots.create(malformedState).has_value());
     assert(snapshots.list().size() == 2);
     assert(!snapshots.find("../outside").has_value());
