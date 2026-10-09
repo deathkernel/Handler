@@ -152,29 +152,47 @@ add_test(NAME handler_cli_invalid_repair_target
         "-DEXPECTED=Unknown repair target"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_repair_missing_arguments COMMAND handler repair)
-set_tests_properties(handler_cli_repair_missing_arguments PROPERTIES
-    PASS_REGULAR_EXPRESSION "Usage: handler repair")
+add_test(NAME handler_cli_repair_missing_arguments
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=repair"
+        "-DEXPECTED=Usage: handler repair"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_rollback_missing_snapshot_id COMMAND handler rollback)
-set_tests_properties(handler_cli_rollback_missing_snapshot_id PROPERTIES
-    PASS_REGULAR_EXPRESSION "Usage: handler rollback")
+add_test(NAME handler_cli_rollback_missing_snapshot_id
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=rollback"
+        "-DEXPECTED=Usage: handler rollback"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_dependency_upgrade_missing_package COMMAND handler dependency-upgrade)
-set_tests_properties(handler_cli_dependency_upgrade_missing_package PROPERTIES
-    PASS_REGULAR_EXPRESSION "Usage: handler dependency-upgrade")
+add_test(NAME handler_cli_dependency_upgrade_missing_package
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=dependency-upgrade"
+        "-DEXPECTED=Usage: handler dependency-upgrade"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_command_missing_tool COMMAND handler command)
-set_tests_properties(handler_cli_command_missing_tool PROPERTIES
-    PASS_REGULAR_EXPRESSION "Usage: handler command")
+add_test(NAME handler_cli_command_missing_tool
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=command"
+        "-DEXPECTED=Usage: handler command"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_recovery_missing_error COMMAND handler recover)
-set_tests_properties(handler_cli_recovery_missing_error PROPERTIES
-    PASS_REGULAR_EXPRESSION "Usage: handler recover")
+add_test(NAME handler_cli_recovery_missing_error
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=recover"
+        "-DEXPECTED=Usage: handler recover"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
-add_test(NAME handler_cli_detect_error_missing_text COMMAND handler detect-error)
-set_tests_properties(handler_cli_detect_error_missing_text PROPERTIES
-    PASS_REGULAR_EXPRESSION "Usage: handler detect-error")
+add_test(NAME handler_cli_detect_error_missing_text
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=detect-error"
+        "-DEXPECTED=Usage: handler detect-error"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
 add_test(NAME handler_cli_blocked_risk_check
     COMMAND ${CMAKE_COMMAND}
