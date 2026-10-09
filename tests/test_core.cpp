@@ -180,6 +180,14 @@ int main() {
     assert(identityJournal.record(transactionB, "MANUAL_ROLLBACK", "B"));
     assert(!identityJournal.hasUnfinishedTransaction());
 
+    const auto multilineTransaction = RecoveryJournal::newTransactionId();
+    assert(identityJournal.record(multilineTransaction, "START", "first line\nsecond line\rthird line"));
+    assert(!identityJournal.hasCorruptEntries());
+    const auto multilineActive = identityJournal.unfinishedTransactionIds();
+    assert(multilineActive.size() == 1 && multilineActive.front() == multilineTransaction);
+    assert(identityJournal.record(multilineTransaction, "COMMIT", "finished"));
+    assert(!identityJournal.hasUnfinishedTransaction());
+
     {
         std::ofstream legacy(journalIdentityFile, std::ios::app);
         legacy << "2026-10-07T00:00:00Z | START | legacy\n";
