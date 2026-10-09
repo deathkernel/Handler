@@ -1,6 +1,7 @@
 #include "handler/snapshot.h"
 
 #include <chrono>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -45,8 +46,10 @@ std::optional<SnapshotInfo> SnapshotStore::create(const EnvironmentState& state)
         << "current_directory=" << state.currentDirectory.string() << '\n'
         << "handler_version=" << state.handlerVersion << '\n';
 
-    if (!out.good()) {
-        out.close();
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    if (!writeSucceeded || out.fail()) {
         std::error_code cleanupEc;
         std::filesystem::remove(path, cleanupEc);
         return std::nullopt;
