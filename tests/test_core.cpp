@@ -365,6 +365,7 @@ int main() {
     state.computerName = "machine";
     state.userName = "user";
     state.handlerVersion = "0.9.0";
+    state.currentDirectory = std::filesystem::current_path();
     const auto snapshot = snapshots.create(state);
     assert(snapshot.has_value());
     assert(snapshots.find(snapshot->id).has_value());
