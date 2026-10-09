@@ -180,6 +180,16 @@ int main() {
     assert(identityJournal.record(transactionB, "MANUAL_ROLLBACK", "B"));
     assert(!identityJournal.hasUnfinishedTransaction());
 
+    const auto failedSnapshotTransaction = RecoveryJournal::newTransactionId();
+    assert(identityJournal.record(failedSnapshotTransaction, "START", "begin"));
+    assert(identityJournal.record(failedSnapshotTransaction, "SNAPSHOT_FAILED", "snapshot unavailable"));
+    assert(!identityJournal.hasCorruptEntries());
+    const auto activeAfterSnapshotFailure = identityJournal.unfinishedTransactionIds();
+    assert(activeAfterSnapshotFailure.size() == 1 &&
+           activeAfterSnapshotFailure.front() == failedSnapshotTransaction);
+    assert(identityJournal.record(failedSnapshotTransaction, "ABORT", "recovery snapshot unavailable"));
+    assert(!identityJournal.hasUnfinishedTransaction());
+
     const auto multilineTransaction = RecoveryJournal::newTransactionId();
     assert(identityJournal.record(multilineTransaction, "START", "first line\nsecond line\rthird line"));
     assert(!identityJournal.hasCorruptEntries());
