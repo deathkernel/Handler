@@ -131,6 +131,7 @@ The current PR branch also includes the following changes; these are **not consi
 - `runApproved` clears its one-shot approval state after normal return and when an exception propagates.
 - Recovery-journal details escape carriage returns and newlines so a detail string cannot inject extra physical records.
 - Recovery-journal writes flush and check stream-close status before reporting persistence success.
+- Artifact content fingerprinting now rejects underlying file-read errors instead of returning a partial digest.
 - Failed snapshot creation is represented as an active journal stage until a terminal outcome is recorded.
 - Snapshot IDs use a stable per-create base and suffix collisions without overwriting an existing snapshot.
 - Snapshot creation flushes and checks stream close status and removes a partial file if persistence fails.
