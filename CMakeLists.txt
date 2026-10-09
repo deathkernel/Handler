@@ -95,6 +95,13 @@ add_executable(handler_tests
 
 target_include_directories(handler_tests PRIVATE include)
 
+# Core regression checks use assert(); keep them active in Release CI builds too.
+if (MSVC)
+    target_compile_options(handler_tests PRIVATE /UNDEBUG)
+else()
+    target_compile_options(handler_tests PRIVATE -UNDEBUG)
+endif()
+
 if (WIN32)
     target_compile_definitions(handler_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_link_libraries(handler_tests PRIVATE Ws2_32)

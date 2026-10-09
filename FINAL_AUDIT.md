@@ -170,3 +170,10 @@ These follow-up changes are included in PR #15. **Cross-platform verification re
 - Snapshot loading now rejects a SnapshotInfo whose ID does not match the canonical filename, even when the supplied path points to another valid snapshot inside the trusted snapshot directory.
 - Added a regression test for mismatched in-root snapshot IDs and paths.
 - Latest cross-platform CI is still required before declaring Stage A complete.
+
+
+### Release-mode regression assertion integrity — 2026-10-09
+
+- The core test executable uses `assert()` extensively. Release configurations commonly define `NDEBUG`, which disables those checks unless explicitly undefined.
+- The `handler_tests` target now undefines `NDEBUG` on MSVC and non-MSVC compilers so assertions remain active in the same Release configuration used by CI.
+- Cross-platform CI must confirm these changes before Stage A can be declared complete.
