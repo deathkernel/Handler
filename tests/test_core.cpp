@@ -224,16 +224,16 @@ int main() {
     std::filesystem::remove(journalTestFile, testEc);
 
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
-    std::filesystem::remove_all(cleanupRoot, ec);
-    std::filesystem::create_directories(cleanupRoot, ec);
-    assert(!ec);
+    std::filesystem::remove_all(cleanupRoot, testEc);
+    std::filesystem::create_directories(cleanupRoot, testEc);
+    assert(!testEc);
     const auto oldFile = cleanupRoot / "old.txt";
     const auto recentFile = cleanupRoot / "recent.txt";
     { std::ofstream(oldFile) << "old"; }
     { std::ofstream(recentFile) << "recent"; }
     std::filesystem::last_write_time(
-        oldFile, std::filesystem::file_time_type::clock::now() - std::chrono::hours(48), ec);
-    assert(!ec);
+        oldFile, std::filesystem::file_time_type::clock::now() - std::chrono::hours(48), testEc);
+    assert(!testEc);
 
     const auto dryRun = cleanTempDirectory(cleanupRoot, true);
     assert(dryRun.dryRun);
@@ -245,7 +245,7 @@ int main() {
     assert(cleaned.filesRemoved == 1);
     assert(!std::filesystem::exists(oldFile));
     assert(std::filesystem::exists(recentFile));
-    std::filesystem::remove_all(cleanupRoot, ec);
+    std::filesystem::remove_all(cleanupRoot, testEc);
 
     Transaction rollbackTx(SafetyMode::Confirm);
     const auto rollbackOk = rollbackTx.runApproved(
