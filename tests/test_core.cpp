@@ -223,6 +223,28 @@ int main() {
     assert(journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
 
+    bool rollbackCalled = false;
+    Transaction failedAction(SafetyMode::Auto);
+    const auto actionFailure = failedAction.run(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [&] { rollbackCalled = true; });
+    assert(!actionFailure.committed);
+    assert(actionFailure.rolledBack);
+    assert(rollbackCalled);
+
+    rollbackCalled = false;
+    Transaction failedVerification(SafetyMode::Auto);
+    const auto verificationFailure = failedVerification.run(
+        RiskLevel::Low,
+        [] { return true; },
+        [] { return VerificationResult{false, "integration test", "forced failure"}; },
+        [&] { rollbackCalled = true; });
+    assert(!verificationFailure.committed);
+    assert(verificationFailure.rolledBack);
+    assert(rollbackCalled);
+
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
     std::filesystem::remove_all(cleanupRoot, testEc);
     std::filesystem::create_directories(cleanupRoot, testEc);
