@@ -87,7 +87,10 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
 #endif
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
         << " | " << stage << " | " << sanitizeDetails(details) << '\n';
-    return out.good();
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    return writeSucceeded && !out.fail();
 }
 
 bool RecoveryJournal::record(const std::string& transactionId,
@@ -114,7 +117,10 @@ bool RecoveryJournal::record(const std::string& transactionId,
         << " | tx=" << transactionId
         << " | " << stage
         << " | " << sanitizeDetails(details) << '\n';
-    return out.good();
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    return writeSucceeded && !out.fail();
 }
 
 std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
