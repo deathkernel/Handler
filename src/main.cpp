@@ -698,13 +698,28 @@ int runRollback(const std::string& id) {
     }
     handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
     const auto unfinished = journal.unfinishedTransactionIds();
+    if (unfinished.size() == 1 && !unfinished.front().empty()) {
+        const auto& activeId = unfinished.front();
+        if (!journal.record(activeId, "RECOVERY_REQUIRED",
+                            "Handler baseline snapshot restored; underlying system rollback is not verified")) {
+            std::cerr << "Handler baseline restored, but the recovery journal could not be updated; the transaction remains blocked.\n";
+            return 1;
+        }
+        std::cerr << "Handler baseline restored, but transaction " << activeId
+                  << " remains blocked: restoring Handler's saved state does not verify rollback of the underlying system change. "
+                     "Complete recovery review before retrying mutations.\n";
+        makeHistory().record("ROLLBACK_APPLIED_RECOVERY_REQUIRED",
+                             id + " | transaction=" + activeId +
+                             " | underlying system rollback not verified");
+        return 1;
+    }
+
     bool journalUpdated = false;
-    if (unfinished.size() == 1 && !unfinished.front().empty())
-        journalUpdated = journal.record(unfinished.front(), "MANUAL_ROLLBACK", id);
-    else if (unfinished.empty())
+    if (unfinished.empty())
         journalUpdated = journal.record("MANUAL_ROLLBACK", id);
     else {
-        std::cerr << "Rollback applied, but recovery journal has multiple active transactions; manual recovery review is required before further mutations.\n";
+        std::cerr << "Rollback applied, but the recovery journal has a legacy or ambiguous active transaction state; "
+                     "manual recovery review is required before further mutations.\n";
         return 1;
     }
     if (!journalUpdated) {

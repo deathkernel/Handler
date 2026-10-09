@@ -39,12 +39,12 @@ Audit scope:
 - Transaction artifacts now carry a content fingerprint; restore rejects same-size backup tampering and verifies the restored file fingerprint before reporting success.
 - Recovery journals now fail closed at transaction boundaries, track active action/verification stages, detect interrupted transactions, and block subsequent high-risk mutations until the interrupted state is reviewed.
 - Transactions now acquire an OS-backed exclusive lock under Handler transaction state, preventing concurrent Handler processes from mutating the same environment and journal simultaneously; the OS releases the lock if the process exits unexpectedly.
-- Manual snapshot rollback now acquires the same transaction lock and records a terminal MANUAL_ROLLBACK stage; if journal persistence fails, the command fails closed instead of silently claiming recovery is complete.
+- Manual snapshot rollback acquires the shared transaction lock. It records a terminal MANUAL_ROLLBACK only when no interrupted transaction is active; restoring Handler's saved baseline alone does not prove that an underlying system mutation was undone.
 - Recovery journal entries now carry a transaction ID; active/terminal state is tracked per transaction, preventing an older transaction's terminal entry from clearing a newer transaction's interrupted state. Legacy three-field journal entries remain readable.
 - Destructive TEMP cleanup now uses the shared transaction lock and recovery journal; dry-runs remain side-effect free, while partial cleanup is marked RECOVERY_REQUIRED and blocks subsequent mutations until review.
 - RECOVERY_REQUIRED is now an active recovery state rather than a terminal state, so partial/uncertain mutations cannot silently reopen the mutation surface.
 - Recovery journal parsing now fails closed on malformed non-empty entries; journal corruption is treated as an interrupted/recovery-required state rather than silently ignored.
-- Manual rollback now closes the uniquely active transaction by ID and refuses to guess if the journal contains multiple active transaction identities.
+- Manual snapshot rollback no longer closes an active transaction merely because Handler's saved baseline was restored. A uniquely active transaction is retained as RECOVERY_REQUIRED until the underlying system rollback is independently completed and verified; legacy or ambiguous active journal states fail closed.
 - Regression tests cover rejection of untrusted baseline paths and Handler state-path boundaries.
 
 ## Second-pass audit status
@@ -177,3 +177,11 @@ These follow-up changes are included in PR #15. **Cross-platform verification re
 - The core test executable uses `assert()` extensively. Release configurations commonly define `NDEBUG`, which disables those checks unless explicitly undefined.
 - The `handler_tests` target now undefines `NDEBUG` on MSVC and non-MSVC compilers so assertions remain active in the same Release configuration used by CI.
 - Cross-platform CI must confirm these changes before Stage A can be declared complete.
+
+
+### Manual rollback recovery-boundary correction — 2026-10-09
+
+- Fixed a safety issue where restoring Handler's saved baseline could write a terminal MANUAL_ROLLBACK record for an interrupted system mutation without verifying that mutation was actually undone.
+- If exactly one transaction is active, snapshot rollback now records RECOVERY_REQUIRED and exits nonzero; mutation-blocking remains in place until the underlying change is recovered and verified.
+- A terminal MANUAL_ROLLBACK is written only when the journal has no active transaction to close. Legacy or ambiguous active states remain fail-closed.
+- The change is committed to PR #15; cross-platform CI for the new head is required before it can be considered verified.
