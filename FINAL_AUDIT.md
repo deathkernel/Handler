@@ -130,11 +130,12 @@ The current PR branch also includes the following changes; these are **not consi
 - Rollback callback exceptions and false returns are treated as rollback failure; the transaction is recorded as `RECOVERY_REQUIRED` instead of falsely closing the recovery record.
 - `runApproved` clears its one-shot approval state after normal return and when an exception propagates.
 - Recovery-journal details escape carriage returns and newlines so a detail string cannot inject extra physical records.
+- Recovery-journal writes flush and check stream-close status before reporting persistence success.
 - Failed snapshot creation is represented as an active journal stage until a terminal outcome is recorded.
 - Snapshot IDs use a stable per-create base and suffix collisions without overwriting an existing snapshot.
 - Snapshot creation flushes and checks stream close status and removes a partial file if persistence fails.
 - Snapshot creation rejects carriage-return/newline values that could inject extra key/value records, and snapshot loading rejects stream I/O errors.
-- Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, one-shot approval not leaking to a later high-risk transaction, multiline journal details, failed snapshots, snapshot record-injection rejection, and multiple snapshots created within one timestamp interval.
+- Added regression coverage for action/verification/rollback exceptions, failed rollback recovery state, one-shot approval not leaking to a later high-risk transaction, multiline journal details, blocked journal storage, failed snapshots, snapshot record-injection rejection, and multiple snapshots created within one timestamp interval.
 
 The documentation refresh itself creates a new PR head; use the live [PR #15 page](https://github.com/deathkernel/Handler/pull/15) to identify the exact current SHA. The latest CI result must match that SHA before merging.
 
