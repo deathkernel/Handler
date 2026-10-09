@@ -336,6 +336,37 @@ int main() {
         [] { return false; });
     assert(!rollbackFail.committed && !rollbackFail.rolledBack);
 
+    // A failed rollback must remain visible as an unfinished recovery transaction.
+    const auto isolatedStateRoot = std::filesystem::temp_directory_path() / "handler-rollback-recovery-state";
+    std::filesystem::remove_all(isolatedStateRoot, testEc);
+    const char* oldStateRootRaw = nullptr;
+#ifdef _WIN32
+    oldStateRootRaw = std::getenv("LOCALAPPDATA");
+    const std::string oldStateRoot = oldStateRootRaw ? oldStateRootRaw : "";
+    _putenv_s("LOCALAPPDATA", isolatedStateRoot.string().c_str());
+#else
+    oldStateRootRaw = std::getenv("XDG_STATE_HOME");
+    const std::string oldStateRoot = oldStateRootRaw ? oldStateRootRaw : "";
+    setenv("XDG_STATE_HOME", isolatedStateRoot.string().c_str(), 1);
+#endif
+    Transaction recoveryRequiredTx(SafetyMode::Auto);
+    const auto recoveryRequired = recoveryRequiredTx.run(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [] { return false; });
+    assert(!recoveryRequired.committed && !recoveryRequired.rolledBack);
+    RecoveryJournal isolatedJournal(handlerTransactionRoot() / "recovery.log");
+    assert(!isolatedJournal.hasCorruptEntries());
+    assert(isolatedJournal.hasUnfinishedTransaction());
+#ifdef _WIN32
+    _putenv_s("LOCALAPPDATA", oldStateRoot.c_str());
+#else
+    if (oldStateRoot.empty()) unsetenv("XDG_STATE_HOME");
+    else setenv("XDG_STATE_HOME", oldStateRoot.c_str(), 1);
+#endif
+    std::filesystem::remove_all(isolatedStateRoot, testEc);
+
     const auto low = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
     assert(low.allowed && !low.requiresConfirmation);
 
