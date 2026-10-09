@@ -889,3 +889,18 @@ Missing tools and unsupported ecosystems remain review-only until an explicit in
 
 Handler version is now **0.9.0**.
 
+
+
+## Build and test locally
+
+Handler uses CMake and CTest. From the repository root:
+
+```sh
+cmake -S . -B build
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+The test suite includes the core regression executable and CLI-level checks for version/help output, safe and blocked risk classification, dependency inspection, guarded failure diagnostics, unknown snapshots, and missing-argument usage. The guarded CLI tests assert both a nonzero exit code and the expected diagnostic; they do not perform real package upgrades or destructive system operations.
+
+Cross-platform CI runs this suite on Windows, Ubuntu, and macOS. Treat a branch as verified only after the CI run for that exact commit completes successfully.
