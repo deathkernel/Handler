@@ -286,6 +286,16 @@ int main() {
     assert(verificationException.rolledBack);
     assert(rollbackCalled);
 
+    Transaction throwingRollback(SafetyMode::Auto);
+    const auto rollbackException = throwingRollback.run(
+        RiskLevel::Low,
+        [] { return false; },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        []() -> bool { throw std::runtime_error("forced rollback exception"); });
+    assert(!rollbackException.committed);
+    assert(!rollbackException.rolledBack);
+    assert(rollbackException.details == "action failed; rollback invoked");
+
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
     std::filesystem::remove_all(cleanupRoot, testEc);
     std::filesystem::create_directories(cleanupRoot, testEc);
