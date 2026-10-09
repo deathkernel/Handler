@@ -90,6 +90,7 @@ add_executable(handler_tests
     src/project_context.cpp
     src/verification.cpp
     src/repair.cpp
+    src/temp_cleaner.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
