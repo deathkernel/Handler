@@ -130,15 +130,36 @@ set_tests_properties(handler_cli_dependency_inspection PROPERTIES
 
 add_test(NAME handler_cli_missing_dependency_upgrade COMMAND handler deps --upgrade handler-nonexistent-package-for-test)
 set_tests_properties(handler_cli_missing_dependency_upgrade PROPERTIES
-    WILL_FAIL TRUE
     PASS_REGULAR_EXPRESSION "Dependency upgrade blocked: package is not declared")
 
 add_test(NAME handler_cli_unknown_snapshot_rollback COMMAND handler rollback handler-missing-snapshot-for-test)
 set_tests_properties(handler_cli_unknown_snapshot_rollback PROPERTIES
-    WILL_FAIL TRUE
     PASS_REGULAR_EXPRESSION "Rollback blocked: snapshot not found")
 
 add_test(NAME handler_cli_invalid_repair_target COMMAND handler repair invalid-target handler-test-package)
 set_tests_properties(handler_cli_invalid_repair_target PROPERTIES
-    WILL_FAIL TRUE
     PASS_REGULAR_EXPRESSION "Unknown repair target")
+
+add_test(NAME handler_cli_repair_missing_arguments COMMAND handler repair)
+set_tests_properties(handler_cli_repair_missing_arguments PROPERTIES
+    PASS_REGULAR_EXPRESSION "Usage: handler repair")
+
+add_test(NAME handler_cli_rollback_missing_snapshot_id COMMAND handler rollback)
+set_tests_properties(handler_cli_rollback_missing_snapshot_id PROPERTIES
+    PASS_REGULAR_EXPRESSION "Usage: handler rollback")
+
+add_test(NAME handler_cli_dependency_upgrade_missing_package COMMAND handler dependency-upgrade)
+set_tests_properties(handler_cli_dependency_upgrade_missing_package PROPERTIES
+    PASS_REGULAR_EXPRESSION "Usage: handler dependency-upgrade")
+
+add_test(NAME handler_cli_command_missing_tool COMMAND handler command)
+set_tests_properties(handler_cli_command_missing_tool PROPERTIES
+    PASS_REGULAR_EXPRESSION "Usage: handler command")
+
+add_test(NAME handler_cli_recovery_missing_error COMMAND handler recover)
+set_tests_properties(handler_cli_recovery_missing_error PROPERTIES
+    PASS_REGULAR_EXPRESSION "Usage: handler recover")
+
+add_test(NAME handler_cli_detect_error_missing_text COMMAND handler detect-error)
+set_tests_properties(handler_cli_detect_error_missing_text PROPERTIES
+    PASS_REGULAR_EXPRESSION "Usage: handler detect-error")
