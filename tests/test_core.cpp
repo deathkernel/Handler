@@ -19,9 +19,11 @@
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
 #include "handler/uninstall.h"
+#include "handler/temp_cleaner.h"
 #include "handler/repair.h"
 
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -220,6 +222,30 @@ int main() {
     assert(journalTest.hasCorruptEntries());
     assert(journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
+
+    const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
+    std::filesystem::remove_all(cleanupRoot, ec);
+    std::filesystem::create_directories(cleanupRoot, ec);
+    assert(!ec);
+    const auto oldFile = cleanupRoot / "old.txt";
+    const auto recentFile = cleanupRoot / "recent.txt";
+    { std::ofstream(oldFile) << "old"; }
+    { std::ofstream(recentFile) << "recent"; }
+    std::filesystem::last_write_time(
+        oldFile, std::filesystem::file_time_type::clock::now() - std::chrono::hours(48), ec);
+    assert(!ec);
+
+    const auto dryRun = cleanTempDirectory(cleanupRoot, true);
+    assert(dryRun.dryRun);
+    assert(dryRun.candidates == 1);
+    assert(std::filesystem::exists(oldFile));
+    assert(std::filesystem::exists(recentFile));
+
+    const auto cleaned = cleanTempDirectory(cleanupRoot, false);
+    assert(cleaned.filesRemoved == 1);
+    assert(!std::filesystem::exists(oldFile));
+    assert(std::filesystem::exists(recentFile));
+    std::filesystem::remove_all(cleanupRoot, ec);
 
     Transaction rollbackTx(SafetyMode::Confirm);
     const auto rollbackOk = rollbackTx.runApproved(
