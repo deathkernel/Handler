@@ -7,8 +7,21 @@
 #include <cstdlib>
 
 #include <filesystem>
+#include <exception>
 
 namespace handler {
+namespace {
+
+bool invokeRollbackSafely(const Transaction::Rollback& rollback) noexcept {
+    if (!rollback) return false;
+    try {
+        return rollback();
+    } catch (...) {
+        return false;
+    }
+}
+
+} // namespace
 
 Transaction::Transaction(SafetyMode mode) : mode_(mode) {}
 
@@ -49,23 +62,40 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
     if (!journal.record(transactionId, "ACTION_BEGIN", "transaction action started"))
         return {false, false, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "transaction aborted: recovery journal unavailable before action"};
 
-    const bool actionOk = action();
+    bool actionOk = false;
+    try {
+        actionOk = action();
+    } catch (...) {
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        journal.record(transactionId, "ROLLBACK", rollbackOk ? "action threw an exception; rollback verified by callback" : "action threw an exception; rollback failed or unavailable");
+        return {false, rollbackOk, snapshot.has_value(),
+                snapshot ? snapshot->id : std::string{}, "action threw an exception; rollback invoked"};
+    }
     if (!actionOk) {
-        const bool rollbackOk = rollback ? rollback() : false;
+        const bool rollbackOk = invokeRollbackSafely(rollback);
         journal.record(transactionId, "ROLLBACK", rollbackOk ? "action failed; rollback verified by callback" : "action failed; rollback failed or unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{}, "action failed; rollback invoked"};
     }
 
     if (!journal.record(transactionId, "VERIFY_BEGIN", "transaction verification started")) {
-        const bool rollbackOk = rollback ? rollback() : false;
+        const bool rollbackOk = invokeRollbackSafely(rollback);
         journal.record(transactionId, "ROLLBACK", rollbackOk ? "journal failure; rollback verified by callback" : "journal failure; rollback failed or unavailable");
         return {false, rollbackOk, snapshot.has_value(), snapshot ? snapshot->id : std::string{}, "verification aborted: recovery journal unavailable"};
     }
 
-    const auto verification = verify();
+    VerificationResult verification{};
+    try {
+        verification = verify();
+    } catch (...) {
+        const bool rollbackOk = invokeRollbackSafely(rollback);
+        journal.record(transactionId, "ROLLBACK", rollbackOk ? "verification threw an exception; rollback verified by callback" : "verification threw an exception; rollback failed or unavailable");
+        return {false, rollbackOk, snapshot.has_value(),
+                snapshot ? snapshot->id : std::string{},
+                "verification threw an exception; rollback invoked"};
+    }
     if (!verification.passed) {
-        const bool rollbackOk = rollback ? rollback() : false;
+        const bool rollbackOk = invokeRollbackSafely(rollback);
         journal.record(transactionId, "ROLLBACK", rollbackOk ? "verification failed; rollback verified by callback" : "verification failed; rollback failed or unavailable");
         return {false, rollbackOk, snapshot.has_value(),
                 snapshot ? snapshot->id : std::string{},
@@ -84,9 +114,14 @@ TransactionResult Transaction::runApproved(RiskLevel risk, const Action& action,
     if (!action || !verify)
         return {false, false, false, {}, "invalid transaction callbacks"};
     preApproved_ = true;
-    const auto result = run(risk, action, verify, rollback);
-    preApproved_ = false;
-    return result;
+    try {
+        const auto result = run(risk, action, verify, rollback);
+        preApproved_ = false;
+        return result;
+    } catch (...) {
+        preApproved_ = false;
+        throw;
+    }
 }
 
 } // namespace handler
