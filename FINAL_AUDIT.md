@@ -115,7 +115,7 @@ The repository is release-oriented within its documented scope, but the limitati
 
 ## Audit refresh — 2026-10-09
 
-The audit and regression coverage were refreshed against the current `main` branch.
+The audit was refreshed for the Handler 0.9.0 codebase; the additional regression tests in this branch are pending the PR's own CI run.
 
 - **Current version:** Handler 0.9.0, consistent across `CMakeLists.txt`, CLI `handler version`, and captured environment-state metadata.
 - **Latest cross-platform CI:** [Build Handler run 37918735056](https://github.com/deathkernel/Handler/actions/runs/37918735056), commit `1ebbcdef796418579c0f639b41fab610cece7a9f`. Ubuntu, macOS, and Windows build and test jobs all completed successfully.
