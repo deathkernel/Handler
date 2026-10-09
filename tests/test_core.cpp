@@ -200,6 +200,12 @@ int main() {
     assert(identityJournal.record(multilineTransaction, "COMMIT", "finished"));
     assert(!identityJournal.hasUnfinishedTransaction());
 
+    // Transaction IDs are parsed as a single journal field and must not inject delimiters.
+    assert(!identityJournal.record("invalid|tx=injected", "START", "must be rejected"));
+    assert(!identityJournal.record("invalid\ntransaction", "START", "must be rejected"));
+    assert(!identityJournal.hasCorruptEntries());
+    assert(!identityJournal.hasUnfinishedTransaction());
+
     {
         std::ofstream legacy(journalIdentityFile, std::ios::app);
         legacy << "2026-10-07T00:00:00Z | START | legacy\n";
@@ -345,6 +351,28 @@ int main() {
         [] { return true; });
     assert(!highRiskAfterApproval.committed);
     assert(!highRiskActionRan);
+
+    // Explicit approval applies only to the transaction it approves, not nested runs.
+    Transaction nestedApprovalTx(SafetyMode::Confirm);
+    bool nestedHighRiskRan = false;
+    bool nestedPolicyBlocked = false;
+    const auto approvedOuter = nestedApprovalTx.runApproved(
+        RiskLevel::Low,
+        [&] {
+            const auto nestedHighRisk = nestedApprovalTx.run(
+                RiskLevel::High,
+                [&] { nestedHighRiskRan = true; return true; },
+                [] { return VerificationResult{true, "verified", ""}; },
+                [] { return true; });
+            nestedPolicyBlocked =
+                nestedHighRisk.details == "user confirmation required before execution";
+            return true;
+        },
+        [] { return VerificationResult{true, "outer verified", ""}; },
+        [] { return true; });
+    assert(approvedOuter.committed);
+    assert(nestedPolicyBlocked);
+    assert(!nestedHighRiskRan);
 
     Transaction rollbackFailTx(SafetyMode::Confirm);
     const auto rollbackFail = rollbackFailTx.runApproved(

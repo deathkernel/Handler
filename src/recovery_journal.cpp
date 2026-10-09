@@ -33,6 +33,13 @@ bool isKnownStage(const std::string& stage) {
     return isActiveStage(stage) || isTerminalStage(stage);
 }
 
+bool isValidTransactionId(const std::string& transactionId) {
+    return !transactionId.empty() &&
+           transactionId.find('|') == std::string::npos &&
+           transactionId.find('\r') == std::string::npos &&
+           transactionId.find('\n') == std::string::npos;
+}
+
 std::string sanitizeDetails(const std::string& details) {
     std::string sanitized;
     sanitized.reserve(details.size());
@@ -96,7 +103,7 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
 bool RecoveryJournal::record(const std::string& transactionId,
                              const std::string& stage,
                              const std::string& details) const {
-    if (transactionId.empty() || !isKnownStage(stage)) return false;
+    if (!isValidTransactionId(transactionId) || !isKnownStage(stage)) return false;
 
     std::error_code ec;
     if (!file_.parent_path().empty())
@@ -165,6 +172,8 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
         }
     }
 
+    if (in.bad() && std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
+        activeIds.emplace_back();
     if (legacyActive)
         activeIds.emplace_back();
     return activeIds;
@@ -172,7 +181,10 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 
 bool RecoveryJournal::hasCorruptEntries() const {
     std::ifstream in(file_);
-    if (!in) return false;
+    if (!in) {
+        std::error_code ec;
+        return std::filesystem::exists(file_, ec) || static_cast<bool>(ec);
+    }
 
     std::string line;
     while (std::getline(in, line)) {
@@ -194,7 +206,7 @@ bool RecoveryJournal::hasCorruptEntries() const {
             if (firstField.empty() || !isKnownStage(firstField)) return true;
         }
     }
-    return false;
+    return in.bad();
 }
 bool RecoveryJournal::hasUnfinishedTransaction() const {
     return hasCorruptEntries() || !unfinishedTransactionIds().empty();

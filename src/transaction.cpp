@@ -39,7 +39,14 @@ Transaction::Transaction(SafetyMode mode) : mode_(mode) {}
 
 TransactionResult Transaction::run(RiskLevel risk, const Action& action,
                                    const Verify& verify, const Rollback& rollback) {
-    const auto decision = preApproved_ ? PolicyDecision{true, false, "explicitly pre-confirmed"} : evaluatePolicy(mode_, risk);
+    return runInternal(false, risk, action, verify, rollback);
+}
+
+TransactionResult Transaction::runInternal(bool approved, RiskLevel risk,
+                                           const Action& action,
+                                           const Verify& verify,
+                                           const Rollback& rollback) {
+    const auto decision = approved ? PolicyDecision{true, false, "explicitly pre-confirmed"} : evaluatePolicy(mode_, risk);
     if (!decision.allowed)
         return {false, false, false, {}, decision.reason};
 
@@ -133,17 +140,7 @@ TransactionResult Transaction::run(RiskLevel risk, const Action& action,
 
 TransactionResult Transaction::runApproved(RiskLevel risk, const Action& action,
                                            const Verify& verify, const Rollback& rollback) {
-    if (!action || !verify)
-        return {false, false, false, {}, "invalid transaction callbacks"};
-    preApproved_ = true;
-    try {
-        const auto result = run(risk, action, verify, rollback);
-        preApproved_ = false;
-        return result;
-    } catch (...) {
-        preApproved_ = false;
-        throw;
-    }
+    return runInternal(true, risk, action, verify, rollback);
 }
 
 } // namespace handler
