@@ -102,7 +102,7 @@ endif()
 
 add_test(NAME handler_core_tests COMMAND handler_tests)
 
-// CLI smoke/integration coverage: exercise the built executable and its public routing.
+# CLI smoke/integration coverage: exercise the built executable and its public routing.
 add_test(NAME handler_cli_version COMMAND handler version)
 set_tests_properties(handler_cli_version PROPERTIES
     PASS_REGULAR_EXPRESSION "Handler 0\\.9\\.0")
