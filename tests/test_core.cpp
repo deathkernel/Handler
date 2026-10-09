@@ -217,6 +217,13 @@ int main() {
     assert(identityJournal.hasUnfinishedTransaction());
     std::filesystem::remove(journalIdentityFile, testEc);
 
+    const auto journalBlockedRoot = std::filesystem::temp_directory_path() / "handler-journal-parent-file";
+    std::filesystem::remove_all(journalBlockedRoot, testEc);
+    { std::ofstream blocked(journalBlockedRoot); blocked << "not a directory"; }
+    RecoveryJournal blockedJournal(journalBlockedRoot / "recovery.log");
+    assert(!blockedJournal.record("START", "must fail"));
+    std::filesystem::remove(journalBlockedRoot, testEc);
+
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
     std::filesystem::remove(journalTestFile, testEc);
     RecoveryJournal journalTest(journalTestFile);
