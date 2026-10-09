@@ -33,6 +33,17 @@ bool isKnownStage(const std::string& stage) {
     return isActiveStage(stage) || isTerminalStage(stage);
 }
 
+std::string sanitizeDetails(const std::string& details) {
+    std::string sanitized;
+    sanitized.reserve(details.size());
+    for (const char ch : details) {
+        if (ch == '\r') sanitized += "\\r";
+        else if (ch == '\n') sanitized += "\\n";
+        else sanitized += ch;
+    }
+    return sanitized;
+}
+
 std::string processIdString() {
 #ifdef _WIN32
     return std::to_string(static_cast<unsigned long long>(GetCurrentProcessId()));
@@ -75,7 +86,7 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
     gmtime_r(&now, &utc);
 #endif
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
-        << " | " << stage << " | " << details << '\n';
+        << " | " << stage << " | " << sanitizeDetails(details) << '\n';
     return out.good();
 }
 
@@ -102,7 +113,7 @@ bool RecoveryJournal::record(const std::string& transactionId,
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ")
         << " | tx=" << transactionId
         << " | " << stage
-        << " | " << details << '\n';
+        << " | " << sanitizeDetails(details) << '\n';
     return out.good();
 }
 
