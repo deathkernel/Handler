@@ -122,6 +122,7 @@ std::optional<EnvironmentState> SnapshotStore::load(const SnapshotInfo& snapshot
             return std::nullopt;
         }
     }
+    if (in.bad()) return std::nullopt;
     if (!timestampSeen || !computerSeen || !userSeen || !tempSeen ||
         !pathSeen || !directorySeen || !versionSeen || state.currentDirectory.empty())
         return std::nullopt;
