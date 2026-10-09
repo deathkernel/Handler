@@ -329,6 +329,16 @@ int main() {
         [] { return true; });
     assert(!rollbackOk.committed && rollbackOk.rolledBack);
 
+    // runApproved must be one-shot: it must not silently approve the next high-risk run.
+    bool highRiskActionRan = false;
+    const auto highRiskAfterApproval = rollbackTx.run(
+        RiskLevel::High,
+        [&] { highRiskActionRan = true; return true; },
+        [] { return VerificationResult{true, "verified", ""}; },
+        [] { return true; });
+    assert(!highRiskAfterApproval.committed);
+    assert(!highRiskActionRan);
+
     Transaction rollbackFailTx(SafetyMode::Confirm);
     const auto rollbackFail = rollbackFailTx.runApproved(
         RiskLevel::Low,
