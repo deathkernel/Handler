@@ -497,9 +497,13 @@ int main() {
     state.currentDirectory = std::filesystem::current_path();
     const auto snapshot = snapshots.create(state);
     assert(snapshot.has_value());
+    const auto secondSnapshot = snapshots.create(state);
+    assert(secondSnapshot.has_value());
+    assert(secondSnapshot->id != snapshot->id);
     assert(snapshots.find(snapshot->id).has_value());
     assert(snapshots.load(*snapshot).has_value());
-    assert(snapshots.list().size() == 1);
+    assert(snapshots.load(*secondSnapshot).has_value());
+    assert(snapshots.list().size() == 2);
     assert(!snapshots.find("../outside").has_value());
     SnapshotInfo traversal{"../outside", tempRoot / ".." / "outside.state"};
     assert(!snapshots.load(traversal).has_value());
