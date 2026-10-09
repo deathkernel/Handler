@@ -19,11 +19,9 @@ add_executable(handler
     src/component_discovery.cpp
     src/project_context.cpp
     src/dependency_manager.cpp
-    src/project_context.cpp
     src/dependency_graph.cpp
     src/verification.cpp
     src/policy.cpp
-    src/verification.cpp
     src/snapshot.cpp
     src/transaction.cpp
     src/transaction_lock.cpp
@@ -45,7 +43,6 @@ add_executable(handler
     src/safe_mode.cpp
     src/deep_cleanup.cpp
     src/uninstall.cpp
-    src/repair.cpp
     src/repair.cpp
     src/auto_recovery.cpp
     src/artifact_backup.cpp
@@ -90,6 +87,9 @@ add_executable(handler_tests
     src/transaction_lock.cpp
     src/recovery_journal.cpp
     src/uninstall.cpp
+    src/project_context.cpp
+    src/verification.cpp
+    src/repair.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
