@@ -23,6 +23,7 @@
 #include "handler/repair.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
