@@ -300,6 +300,21 @@ int main() {
     const auto invalidDependencyRoot =
         std::filesystem::temp_directory_path() / "handler-invalid-dependency-test";
     std::filesystem::remove_all(invalidDependencyRoot, ec);
+
+    // Inspection and version-selection edge cases must remain deterministic and side-effect free.
+    const auto emptyDependencyRoot =
+        std::filesystem::temp_directory_path() / "handler-empty-dependency-test";
+    std::filesystem::remove_all(emptyDependencyRoot, ec);
+    std::filesystem::create_directories(emptyDependencyRoot, ec);
+    assert(!ec);
+    const auto emptyPythonInfo = inspectDependencies(emptyDependencyRoot, "Python");
+    assert(emptyPythonInfo.manifest.empty());
+    assert(emptyPythonInfo.declared.empty());
+    assert(!parseDependencyVersion("not-a-version").has_value());
+    assert(!parseDependencyVersion("").has_value());
+    assert(!selectCompatibleDependencyVersion(
+        {">=4.0,<3.0"}, {"2.9.0", "3.5.0", "4.0.0"}).has_value());
+    std::filesystem::remove_all(emptyDependencyRoot, ec);
     std::filesystem::create_directories(invalidDependencyRoot, ec);
     assert(upgradeDependency(invalidDependencyRoot, "Python", "bad;package", ">=1.0") == 3);
     assert(upgradeDependency(invalidDependencyRoot, "Node.js", "bad;package", ">=1.0") == 3);
