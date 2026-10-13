@@ -831,8 +831,10 @@ int runDeps(int argc, char* argv[]) {
     if (argc >= 4 && std::string(argv[2]) == "--upgrade") {
         const std::string package = argv[3];
         for (const auto& req : requirements) {
-            if (req.name == package)
+            if (req.name == package) {
+                if (mutationBlockedByInterruptedTransaction()) return 1;
                 return handler::upgradeDependency(context.root, context.type, req.name, req.constraint);
+            }
         }
         std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
         return 3;
@@ -1012,10 +1014,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "project") return runProject();
-    if (command == "deps") {
-        if (argc >= 4 && std::string(argv[2]) == "--upgrade" && mutationBlockedByInterruptedTransaction()) return 1;
-        return runDeps(argc, argv);
-    }
+    if (command == "deps") return runDeps(argc, argv);
     if (command == "dependency-upgrade") {
         if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
@@ -1024,8 +1023,10 @@ int main(int argc, char* argv[]) {
         const auto info = handler::inspectDependencies(context.root, context.type);
         const auto requirements = handler::parseDependencyRequirements(info);
         for (const auto& req : requirements)
-            if (req.name == argv[2])
+            if (req.name == argv[2]) {
+                if (mutationBlockedByInterruptedTransaction()) return 1;
                 return handler::upgradeDependency(context.root, context.type, req.name, req.constraint);
+            }
         std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
         return 3;
     }
