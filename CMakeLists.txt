@@ -124,3 +124,7 @@ set_tests_properties(handler_cli_safe_risk_check PROPERTIES
 add_test(NAME handler_cli_unknown_command COMMAND handler handler-test-unknown-command)
 set_tests_properties(handler_cli_unknown_command PROPERTIES
     WILL_FAIL TRUE)
+
+add_test(NAME handler_cli_setup_invalid_template COMMAND handler setup project invalid handler-invalid-project)
+set_tests_properties(handler_cli_setup_invalid_template PROPERTIES
+    WILL_FAIL TRUE)
