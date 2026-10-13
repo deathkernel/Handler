@@ -46,6 +46,7 @@ add_executable(handler
     src/repair.cpp
     src/auto_recovery.cpp
     src/artifact_backup.cpp
+    src/developer_setup.cpp
 )
 
 target_include_directories(handler PRIVATE include)
@@ -91,6 +92,7 @@ add_executable(handler_tests
     src/verification.cpp
     src/repair.cpp
     src/temp_cleaner.cpp
+    src/developer_setup.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
