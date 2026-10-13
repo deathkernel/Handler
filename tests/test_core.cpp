@@ -529,6 +529,28 @@ int main() {
     assert(invalidSetupPlan.packages.empty());
     assert(!invalidSetupPlan.warnings.empty());
 
+    const auto scaffoldRoot = std::filesystem::temp_directory_path() / "handler_setup_scaffold_test";
+    std::filesystem::remove_all(scaffoldRoot, ec);
+    std::filesystem::create_directories(scaffoldRoot, ec);
+    assert(!ec);
+    std::string scaffoldDetails;
+    const auto pythonProject = scaffoldRoot / "sample-python";
+    assert(createDeveloperProject("python", pythonProject.string(), scaffoldDetails));
+    assert(std::filesystem::exists(pythonProject / "pyproject.toml"));
+    assert(std::filesystem::exists(pythonProject / "src" / "main.py"));
+    assert(std::filesystem::exists(pythonProject / "tests" / "test_smoke.py"));
+    assert(!createDeveloperProject("python", pythonProject.string(), scaffoldDetails));
+    assert(scaffoldDetails.find("already exists") != std::string::npos);
+    const auto webProject = scaffoldRoot / "sample-web";
+    assert(createDeveloperProject("web", webProject.string(), scaffoldDetails));
+    assert(std::filesystem::exists(webProject / "package.json"));
+    const auto nativeProject = scaffoldRoot / "sample-native";
+    assert(createDeveloperProject("native", nativeProject.string(), scaffoldDetails));
+    assert(std::filesystem::exists(nativeProject / "CMakeLists.txt"));
+    assert(!createDeveloperProject("unknown", (scaffoldRoot / "bad").string(), scaffoldDetails));
+    assert(!std::filesystem::exists(scaffoldRoot / "bad"));
+    std::filesystem::remove_all(scaffoldRoot, ec);
+
     std::cout << "Handler core tests passed.\n";
     return 0;
 }
