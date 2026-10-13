@@ -46,6 +46,7 @@ add_executable(handler
     src/repair.cpp
     src/auto_recovery.cpp
     src/artifact_backup.cpp
+    src/developer_setup.cpp
 )
 
 target_include_directories(handler PRIVATE include)
@@ -91,6 +92,7 @@ add_executable(handler_tests
     src/verification.cpp
     src/repair.cpp
     src/temp_cleaner.cpp
+    src/developer_setup.cpp
 )
 
 target_include_directories(handler_tests PRIVATE include)
@@ -207,3 +209,18 @@ add_test(NAME handler_cli_blocked_risk_check
         "-DARGS=risk;diskpart"
         "-DEXPECTED=Risk: BLOCKED"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_setup_invalid_template
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=setup;project;invalid;handler-invalid-project"
+        "-DEXPECTED=Unsupported template"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_setup_profiles COMMAND handler setup profiles)
+set_tests_properties(handler_cli_setup_profiles PROPERTIES
+    PASS_REGULAR_EXPRESSION "python.*Python Developer")
+
+add_test(NAME handler_cli_setup_plan_python COMMAND handler setup plan python)
+set_tests_properties(handler_cli_setup_plan_python PROPERTIES
+    PASS_REGULAR_EXPRESSION "Planning only")
