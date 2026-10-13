@@ -1,7 +1,10 @@
 #include "handler/developer_setup.h"
+#include "handler/command_engine.h"
 
 #include <algorithm>
 #include <iostream>
+#include <filesystem>
+#include <fstream>
 
 namespace handler {
 namespace {
@@ -110,6 +113,143 @@ void printDeveloperSetupPlan(const SetupPlan& plan) {
     }
     for (const auto& warning : plan.warnings)
         std::cout << "[INFO] " << warning << "\n";
+}
+
+
+std::vector<HostCheck> inspectDeveloperHost() {
+    std::vector<HostCheck> checks;
+#ifdef _WIN32
+    checks.push_back({"OS", "OK", "Windows"});
+#else
+    checks.push_back({"OS", "INFO", "Non-Windows platform; WinGet installation is unavailable"});
+#endif
+#if defined(_M_X64) || defined(__x86_64__)
+    checks.push_back({"Architecture", "OK", "x64"});
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    checks.push_back({"Architecture", "OK", "ARM64"});
+#elif defined(_M_IX86) || defined(__i386__)
+    checks.push_back({"Architecture", "OK", "x86"});
+#else
+    checks.push_back({"Architecture", "UNKNOWN", "Compiler did not expose a known architecture"});
+#endif
+    std::error_code ec;
+    const auto space = std::filesystem::space(std::filesystem::current_path(), ec);
+    if (!ec) {
+        const auto gib = static_cast<double>(space.available) / (1024.0 * 1024.0 * 1024.0);
+        checks.push_back({"Disk space", "OK",
+            std::to_string(static_cast<unsigned long long>(gib * 100.0) / 100.0) +
+            " GiB available on current volume"});
+    } else {
+        checks.push_back({"Disk space", "UNKNOWN", "Unable to query free space"});
+    }
+    for (const auto& tool : std::vector<std::string>{"python", "git", "winget"}) {
+#ifndef _WIN32
+        if (tool == "winget") {
+            checks.push_back({"WinGet", "UNAVAILABLE", "WinGet is Windows-only"});
+            continue;
+        }
+#endif
+        CommandSpec spec{"developer-setup-preflight", tool, {"--version"},
+                         RiskLevel::Low, 10000};
+        const auto result = executeCommand(spec);
+        const bool ok = result.started && result.exitCode == 0;
+        std::string details = result.output.empty() ? result.error : result.output;
+        const auto newline = details.find_first_of("\r\n");
+        if (newline != std::string::npos) details.resize(newline);
+        if (details.empty()) details = ok ? "version check passed" : "not available or version check failed";
+        checks.push_back({tool, ok ? "OK" : "MISSING", details});
+    }
+    return checks;
+}
+
+bool createDeveloperProject(const std::string& templateId,
+                            const std::string& targetDirectory,
+                            std::string& details) {
+    namespace fs = std::filesystem;
+    if (templateId != "python" && templateId != "web" && templateId != "native") {
+        details = "Unsupported template. Choose python, web, or native.";
+        return false;
+    }
+    if (targetDirectory.empty()) {
+        details = "Project directory must not be empty.";
+        return false;
+    }
+    const fs::path target = fs::path(targetDirectory).lexically_normal();
+    if (target == target.root_path() || target.filename().empty()) {
+        details = "Refusing to create a project at a filesystem root.";
+        return false;
+    }
+    std::error_code ec;
+    if (fs::exists(target, ec)) {
+        details = "Target already exists; Handler will not overwrite existing files.";
+        return false;
+    }
+    const auto parent = target.parent_path().empty() ? fs::current_path() : target.parent_path();
+    if (!fs::exists(parent, ec) || !fs::is_directory(parent, ec)) {
+        details = "Parent directory does not exist or is not a directory.";
+        return false;
+    }
+    if (!fs::create_directory(target, ec) || ec) {
+        details = "Could not create project directory: " + ec.message();
+        return false;
+    }
+    auto writeFile = [&](const fs::path& relative, const std::string& content) {
+        std::ofstream out(target / relative, std::ios::binary | std::ios::out);
+        if (!out) return false;
+        out << content;
+        out.close();
+        return static_cast<bool>(out);
+    };
+    bool ok = false;
+    if (templateId == "python") {
+        ok = writeFile("pyproject.toml",
+            "[project]\nname = \"" + target.filename().string() +
+            "\"\nversion = \"0.1.0\"\ndescription = \"\"\nrequires-python = \">=3.11\"\n"
+            "\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n");
+        ok = ok && writeFile(".gitignore", ".venv/\n__pycache__/\n.pytest_cache/\n.ruff_cache/\n");
+        ok = ok && writeFile("README.md", "# " + target.filename().string() +
+            "\n\nPython project created by Handler.\nCreate a virtual environment with python -m venv .venv.\n");
+        ok = ok && fs::create_directory(target / "src", ec) && !ec;
+        ec.clear();
+        ok = ok && fs::create_directory(target / "tests", ec) && !ec;
+        ok = ok && writeFile(fs::path("src") / "main.py",
+            "def main() -> None:\n    print(\"Hello from " + target.filename().string() +
+            "!\")\n\nif __name__ == \"__main__\":\n    main()\n");
+        ok = ok && writeFile(fs::path("tests") / "test_smoke.py",
+            "def test_smoke() -> None:\n    assert True\n");
+    } else if (templateId == "web") {
+        ok = writeFile("package.json", "{\n  \"name\": \"" + target.filename().string() +
+            "\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": { \"test\": \"node --test\" }\n}\n");
+        ok = ok && writeFile(".gitignore", "node_modules/\n.env\ndist/\n");
+        ok = ok && writeFile("README.md", "# " + target.filename().string() +
+            "\n\nWeb project scaffold created by Handler.\n");
+        ec.clear();
+        ok = ok && fs::create_directory(target / "src", ec) && !ec;
+        ok = ok && writeFile(fs::path("src") / "index.js", "console.log('Hello from Handler');\n");
+        ok = ok && writeFile("index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>" +
+            target.filename().string() + "</title><body><script src=\"src/index.js\"></script></body></html>\n");
+    } else {
+        ok = writeFile("CMakeLists.txt", "cmake_minimum_required(VERSION 3.20)\nproject(" +
+            target.filename().string() + " LANGUAGES CXX)\nset(CMAKE_CXX_STANDARD 17)\n"
+            "set(CMAKE_CXX_STANDARD_REQUIRED ON)\nadd_executable(app src/main.cpp)\n");
+        ok = ok && writeFile(".gitignore", "build/\ncmake-build-*/\n");
+        ok = ok && writeFile("README.md", "# " + target.filename().string() +
+            "\n\nC++ project scaffold created by Handler.\n");
+        ec.clear();
+        ok = ok && fs::create_directory(target / "src", ec) && !ec;
+        ok = ok && writeFile(fs::path("src") / "main.cpp",
+            "#include <iostream>\nint main() { std::cout << \"Hello from Handler\\n\"; return 0; }\n");
+    }
+    if (!ok) {
+        std::error_code cleanupError;
+        fs::remove_all(target, cleanupError);
+        details = "Project scaffold failed; newly created target removed where possible.";
+        if (cleanupError) details += " Cleanup warning: " + cleanupError.message();
+        return false;
+    }
+    details = "Created " + templateId + " project at " + target.string() +
+              ". No packages were installed.";
+    return true;
 }
 
 } // namespace handler
