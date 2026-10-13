@@ -1,12 +1,11 @@
-# Developer Environment Setup (v1.0 plan)
+# Developer Environment Setup (v1.0)
 
-Handler's developer setup feature is designed to prepare a Windows development environment through named, reviewable profiles.
+Handler's Windows-first setup workflow provides named profiles, a read-only host preflight, and minimal project scaffolds. The setup planner remains read-only: it does not install packages.
 
-## First increment
-
-The first increment provides a **read-only plan preview**:
+## Commands
 
 ```text
+handler setup scan
 handler setup profiles
 handler setup plan base
 handler setup plan python
@@ -14,31 +13,35 @@ handler setup plan web
 handler setup plan fullstack
 handler setup plan native
 handler setup plan custom
+handler setup project python <path>
+handler setup project web <path>
+handler setup project native <path>
 ```
 
-It does not execute WinGet or change the machine. Package identifiers in the code are reviewed catalog entries and must be revalidated against current WinGet metadata before a future installation implementation is enabled.
+## Host preflight
+
+`handler setup scan` reports the current platform, compiler-visible architecture, free space on the current working-directory volume, and version-check results for Python, Git, and (on Windows) WinGet. It is observational only. Free space is not an installer-size estimate, and a tool's version command failing does not prove that every installation is absent.
 
 ## Profiles
 
 - `base`: Python Install Manager, Git, Visual Studio Code.
-- `python`: base tools; project-local virtual environment and Python quality-tool setup are later increments.
+- `python`: base tools; Python project scaffolding is available, but dependencies are not installed automatically.
 - `web`: base tools plus Node.js LTS.
 - `fullstack`: base tools plus Node.js LTS. Database and Docker remain opt-in.
 - `native`: base tools plus CMake. CMake is not a compiler; an MSVC/Build Tools workload requires separate compatibility review and explicit approval.
 - `custom`: catalog preview covering optional GitHub CLI, Windows Terminal, Node.js, JDK, CMake, Go, Rustup, PostgreSQL, and Docker Desktop.
 
-## Intended follow-up increments
+## Project scaffolds
 
-1. Read-only host scan: OS version, architecture, WinGet availability, existing package/runtimes, and free disk space.
-2. Dependency and compatibility resolver; revalidate package IDs, installer architecture, and source.
-3. Explicit install preview showing version/source/estimated disk footprint and privilege requirements.
-4. WinGet installation behind Handler's allowlist, risk policy, transaction lock, recovery journal, confirmation, timeout, and result verification.
-5. Project templates and virtual environments.
-6. Repair diagnostics and supported recovery paths.
+Project creation supports `python`, `web`, and `native`. It refuses to overwrite an existing target, requires an existing parent directory, and removes the newly created target on scaffold failure where possible. It writes starter manifests, README/.gitignore files, and minimal source/test files. It does not create a Python virtual environment or install dependencies; run those steps explicitly after reviewing the generated files.
 
-## Safety requirements before installation execution
+## Installer boundary
 
-- Never execute arbitrary IDs, shell fragments, or package names provided as raw command strings.
+WinGet package installation is not enabled by this feature increment. Package identifiers and source metadata still require live validation, installed-package detection, disk/privilege preflight, explicit confirmation, transaction/recovery integration, and post-install verification before installation execution is safe to enable.
+
+## Safety requirements for future installation execution
+
+- Never execute arbitrary IDs, shell fragments, or package names as raw command strings.
 - Build process arguments as structured arguments; do not use generic shell execution.
 - Require explicit confirmation for changes and elevation only when necessary.
 - Preserve existing Python installations and report PATH conflicts instead of silently overwriting them.
@@ -47,8 +50,6 @@ It does not execute WinGet or change the machine. Package identifiers in the cod
 - Log action outcome and distinguish installation failure from rollback. Do not claim OS-level rollback unless it was verified.
 - Do not install C/C++ build workloads, databases, or Docker by default.
 - Fail closed if Handler has an unfinished high-risk transaction.
-- Keep plan mode free of package manager invocations and machine changes.
+- Keep plan mode free of package-manager invocations and machine changes.
 
-## Planning notes
-
-Disk-space numbers should be presented only when a reliable package-manager or installer estimate is available. Otherwise display "unknown; check vendor requirements" rather than invent a precise footprint. Python libraries such as pytest and Ruff belong in a project virtual environment rather than a global Python environment.
+Disk-space estimates should be shown only when a reliable installer estimate is available; otherwise report that the size is unknown. Python libraries such as pytest and Ruff belong in a project virtual environment rather than a global Python environment.
