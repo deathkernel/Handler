@@ -698,13 +698,28 @@ int runRollback(const std::string& id) {
     }
     handler::RecoveryJournal journal(transactionRoot() / "recovery.log");
     const auto unfinished = journal.unfinishedTransactionIds();
+    if (unfinished.size() == 1 && !unfinished.front().empty()) {
+        const auto& activeId = unfinished.front();
+        if (!journal.record(activeId, "RECOVERY_REQUIRED",
+                            "Handler baseline snapshot restored; underlying system rollback is not verified")) {
+            std::cerr << "Handler baseline restored, but the recovery journal could not be updated; the transaction remains blocked.\n";
+            return 1;
+        }
+        std::cerr << "Handler baseline restored, but transaction " << activeId
+                  << " remains blocked: restoring Handler's saved state does not verify rollback of the underlying system change. "
+                     "Complete recovery review before retrying mutations.\n";
+        makeHistory().record("ROLLBACK_APPLIED_RECOVERY_REQUIRED",
+                             id + " | transaction=" + activeId +
+                             " | underlying system rollback not verified");
+        return 1;
+    }
+
     bool journalUpdated = false;
-    if (unfinished.size() == 1 && !unfinished.front().empty())
-        journalUpdated = journal.record(unfinished.front(), "MANUAL_ROLLBACK", id);
-    else if (unfinished.empty())
+    if (unfinished.empty())
         journalUpdated = journal.record("MANUAL_ROLLBACK", id);
     else {
-        std::cerr << "Rollback applied, but recovery journal has multiple active transactions; manual recovery review is required before further mutations.\n";
+        std::cerr << "Rollback applied, but the recovery journal has a legacy or ambiguous active transaction state; "
+                     "manual recovery review is required before further mutations.\n";
         return 1;
     }
     if (!journalUpdated) {
@@ -816,8 +831,10 @@ int runDeps(int argc, char* argv[]) {
     if (argc >= 4 && std::string(argv[2]) == "--upgrade") {
         const std::string package = argv[3];
         for (const auto& req : requirements) {
-            if (req.name == package)
+            if (req.name == package) {
+                if (mutationBlockedByInterruptedTransaction()) return 1;
                 return handler::upgradeDependency(context.root, context.type, req.name, req.constraint);
+            }
         }
         std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
         return 3;
@@ -933,29 +950,31 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "recover") {
-        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) {
             std::cerr << "Usage: handler recover <error text>\n";
             return 2;
         }
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         return handler::autoRecover(joinArguments(argc, argv, 2));
     }
 
     if (command == "repair") {
-        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 4) {
             std::cerr << "Usage: handler repair <python-module|node-module> <package>\n";
             return 2;
         }
-        if (std::string(argv[2]) == "python-module")
+        const std::string target = argv[2];
+        if (target != "python-module" && target != "node-module") {
+            std::cerr << "Unknown repair target: " << target << "\n";
+            return 2;
+        }
+        if (mutationBlockedByInterruptedTransaction()) return 1;
+        if (target == "python-module")
             return handler::repairPythonModule(argv[3]);
-        if (std::string(argv[2]) == "node-module")
-            return handler::repairNodeModule(argv[3]);
-        std::cerr << "Unknown repair target: " << argv[2] << "\n";
-        return 2;
+        return handler::repairNodeModule(argv[3]);
     }
 
-    if (command == "temp-cleanup" && argc >= 3 &&
+        if (command == "temp-cleanup" && argc >= 3 &&
         std::string(argv[2]) == "--dry-run")
         return runTempCleanup(true);
 
@@ -997,24 +1016,22 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "project") return runProject();
-    if (command == "deps") {
-        if (argc >= 4 && std::string(argv[2]) == "--upgrade" && mutationBlockedByInterruptedTransaction()) return 1;
-        return runDeps(argc, argv);
-    }
+    if (command == "deps") return runDeps(argc, argv);
     if (command == "dependency-upgrade") {
-        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
         const auto context = currentProject();
         if (context.root.empty()) { std::cerr << "No supported project detected.\n"; return 1; }
         const auto info = handler::inspectDependencies(context.root, context.type);
         const auto requirements = handler::parseDependencyRequirements(info);
         for (const auto& req : requirements)
-            if (req.name == argv[2])
+            if (req.name == argv[2]) {
+                if (mutationBlockedByInterruptedTransaction()) return 1;
                 return handler::upgradeDependency(context.root, context.type, req.name, req.constraint);
+            }
         std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
         return 3;
     }
-    if (command == "graph") return runGraph();
+        if (command == "graph") return runGraph();
 
     const int result = router.dispatch(command);
     if (result == 127) {

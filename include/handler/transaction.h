@@ -30,8 +30,10 @@ public:
                                   const Verify& verify, const Rollback& rollback);
 
 private:
+    TransactionResult runInternal(bool approved, RiskLevel risk,
+                                  const Action& action, const Verify& verify,
+                                  const Rollback& rollback);
     SafetyMode mode_;
-    bool preApproved_{false};
 };
 
 } // namespace handler

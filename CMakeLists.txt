@@ -95,6 +95,13 @@ add_executable(handler_tests
 
 target_include_directories(handler_tests PRIVATE include)
 
+# Core regression checks use assert(); keep them active in Release CI builds too.
+if (MSVC)
+    target_compile_options(handler_tests PRIVATE /UNDEBUG)
+else()
+    target_compile_options(handler_tests PRIVATE -UNDEBUG)
+endif()
+
 if (WIN32)
     target_compile_definitions(handler_tests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_link_libraries(handler_tests PRIVATE Ws2_32)
@@ -119,6 +126,84 @@ add_test(NAME handler_cli_safe_risk_check COMMAND handler risk "python --version
 set_tests_properties(handler_cli_safe_risk_check PROPERTIES
     PASS_REGULAR_EXPRESSION "Risk: SAFE")
 
-add_test(NAME handler_cli_unknown_command COMMAND handler handler-test-unknown-command)
-set_tests_properties(handler_cli_unknown_command PROPERTIES
-    WILL_FAIL TRUE)
+add_test(NAME handler_cli_unknown_command
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=handler-test-unknown-command"
+        "-DEXPECTED=Unknown Handler command"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+# CLI regression checks for project inspection and guarded failure paths.
+add_test(NAME handler_cli_dependency_inspection COMMAND handler deps)
+set_tests_properties(handler_cli_dependency_inspection PROPERTIES
+    PASS_REGULAR_EXPRESSION "Dependency inspection")
+
+add_test(NAME handler_cli_missing_dependency_upgrade
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=deps;--upgrade;handler-nonexistent-package-for-test"
+        "-DEXPECTED=Dependency upgrade blocked: package is not declared"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_unknown_snapshot_rollback
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=rollback;handler-missing-snapshot-for-test"
+        "-DEXPECTED=Rollback blocked: snapshot not found"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_invalid_repair_target
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=repair;invalid-target;handler-test-package"
+        "-DEXPECTED=Unknown repair target"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_repair_missing_arguments
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=repair"
+        "-DEXPECTED=Usage: handler repair"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_rollback_missing_snapshot_id
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=rollback"
+        "-DEXPECTED=Usage: handler rollback"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_dependency_upgrade_missing_package
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=dependency-upgrade"
+        "-DEXPECTED=Usage: handler dependency-upgrade"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_command_missing_tool
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=command"
+        "-DEXPECTED=Usage: handler command"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_recovery_missing_error
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=recover"
+        "-DEXPECTED=Usage: handler recover"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_detect_error_missing_text
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=detect-error"
+        "-DEXPECTED=Usage: handler detect-error"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_blocked_risk_check
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=risk;diskpart"
+        "-DEXPECTED=Risk: BLOCKED"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")

@@ -516,7 +516,7 @@ Level 7 is still a hardening foundation. Timeout handling, process-tree containm
 
 ### ## Current Release Status
 
-Handler **0.8.0** is the current development release. It is a deterministic C++17 developer-environment protection and recovery tool with Windows-first repair capabilities and portable observation/testing on Linux and macOS.
+Handler **0.9.0** is the current development release. It is a deterministic C++17 developer-environment protection and recovery tool with Windows-first repair capabilities and portable observation/testing on Linux and macOS.
 
 ### Implemented release capabilities
 
@@ -589,7 +589,7 @@ handler modules
 
 Real uninstall is confirmation-gated; `--dry-run` only plans the operation. Rollback is reported as verified only after the captured package version is checked again.
 
-`handler version` reports **0.8.0**.
+`handler version` reports **0.9.0**.
 
 ## Performance Model
 
@@ -887,5 +887,20 @@ Supported automatic repair targets in this batch:
 
 Missing tools and unsupported ecosystems remain review-only until an explicit installer/source policy exists.
 
-Handler version is now **0.8.0**.
+Handler version is now **0.9.0**.
 
+
+
+## Build and test locally
+
+Handler uses CMake and CTest. From the repository root:
+
+```sh
+cmake -S . -B build
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+The test suite includes the core regression executable and CLI-level checks for version/help output, safe and blocked risk classification, dependency inspection, guarded failure diagnostics, unknown snapshots, and missing-argument usage. The guarded CLI tests assert both a nonzero exit code and the expected diagnostic; they do not perform real package upgrades or destructive system operations.
+
+Cross-platform CI runs this suite on Windows, Ubuntu, and macOS. Treat a branch as verified only after the CI run for that exact commit completes successfully.
