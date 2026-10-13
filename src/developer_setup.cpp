@@ -5,6 +5,7 @@
 #include <iostream>
 #include <filesystem>
 #include <fstream>
+#include <cctype>
 
 namespace handler {
 namespace {
@@ -30,6 +31,28 @@ const std::vector<SetupPackage> kPackages{
     {"Docker.DockerDesktop", "Docker Desktop",
      "Optional containers; requires compatible Windows/virtualization setup.", false}
 };
+
+std::string safeProjectName(const std::string& raw) {
+    std::string name;
+    name.reserve(raw.size());
+    for (const unsigned char ch : raw) {
+        if (std::isalnum(ch)) {
+            name.push_back(static_cast<char>(std::tolower(ch)));
+        } else if (ch == '-' || ch == '_') {
+            name.push_back(static_cast<char>(ch));
+        } else {
+            name.push_back('-');
+        }
+    }
+    while (!name.empty() && (name.front() == '-' || name.front() == '_'))
+        name.erase(name.begin());
+    while (!name.empty() && (name.back() == '-' || name.back() == '_'))
+        name.pop_back();
+    if (name.empty()) name = "handler-project";
+    if (std::isdigit(static_cast<unsigned char>(name.front())))
+        name.insert(0, "project-");
+    return name;
+}
 
 const std::vector<SetupProfile> kProfiles{
     {"base", "Base Developer",
@@ -184,6 +207,7 @@ bool createDeveloperProject(const std::string& templateId,
         details = "Target already exists; Handler will not overwrite existing files.";
         return false;
     }
+    const std::string projectName = safeProjectName(projectName);
     const auto parent = target.parent_path().empty() ? fs::current_path() : target.parent_path();
     if (!fs::exists(parent, ec) || !fs::is_directory(parent, ec)) {
         details = "Parent directory does not exist or is not a directory.";
@@ -203,37 +227,37 @@ bool createDeveloperProject(const std::string& templateId,
     bool ok = false;
     if (templateId == "python") {
         ok = writeFile("pyproject.toml",
-            "[project]\nname = \"" + target.filename().string() +
+            "[project]\nname = \"" + projectName +
             "\"\nversion = \"0.1.0\"\ndescription = \"\"\nrequires-python = \">=3.11\"\n"
             "\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n");
         ok = ok && writeFile(".gitignore", ".venv/\n__pycache__/\n.pytest_cache/\n.ruff_cache/\n");
-        ok = ok && writeFile("README.md", "# " + target.filename().string() +
+        ok = ok && writeFile("README.md", "# " + projectName +
             "\n\nPython project created by Handler.\nCreate a virtual environment with python -m venv .venv.\n");
         ok = ok && fs::create_directory(target / "src", ec) && !ec;
         ec.clear();
         ok = ok && fs::create_directory(target / "tests", ec) && !ec;
         ok = ok && writeFile(fs::path("src") / "main.py",
-            "def main() -> None:\n    print(\"Hello from " + target.filename().string() +
+            "def main() -> None:\n    print(\"Hello from " + projectName +
             "!\")\n\nif __name__ == \"__main__\":\n    main()\n");
         ok = ok && writeFile(fs::path("tests") / "test_smoke.py",
             "def test_smoke() -> None:\n    assert True\n");
     } else if (templateId == "web") {
-        ok = writeFile("package.json", "{\n  \"name\": \"" + target.filename().string() +
+        ok = writeFile("package.json", "{\n  \"name\": \"" + projectName +
             "\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": { \"test\": \"node --test\" }\n}\n");
         ok = ok && writeFile(".gitignore", "node_modules/\n.env\ndist/\n");
-        ok = ok && writeFile("README.md", "# " + target.filename().string() +
+        ok = ok && writeFile("README.md", "# " + projectName +
             "\n\nWeb project scaffold created by Handler.\n");
         ec.clear();
         ok = ok && fs::create_directory(target / "src", ec) && !ec;
         ok = ok && writeFile(fs::path("src") / "index.js", "console.log('Hello from Handler');\n");
         ok = ok && writeFile("index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>" +
-            target.filename().string() + "</title><body><script src=\"src/index.js\"></script></body></html>\n");
+            projectName + "</title><body><script src=\"src/index.js\"></script></body></html>\n");
     } else {
         ok = writeFile("CMakeLists.txt", "cmake_minimum_required(VERSION 3.20)\nproject(" +
-            target.filename().string() + " LANGUAGES CXX)\nset(CMAKE_CXX_STANDARD 17)\n"
+            projectName + " LANGUAGES CXX)\nset(CMAKE_CXX_STANDARD 17)\n"
             "set(CMAKE_CXX_STANDARD_REQUIRED ON)\nadd_executable(app src/main.cpp)\n");
         ok = ok && writeFile(".gitignore", "build/\ncmake-build-*/\n");
-        ok = ok && writeFile("README.md", "# " + target.filename().string() +
+        ok = ok && writeFile("README.md", "# " + projectName +
             "\n\nC++ project scaffold created by Handler.\n");
         ec.clear();
         ok = ok && fs::create_directory(target / "src", ec) && !ec;
