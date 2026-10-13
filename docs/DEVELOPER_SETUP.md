@@ -20,7 +20,7 @@ handler setup project native <path>
 
 ## Host preflight
 
-`handler setup scan` reports the current platform, compiler-visible architecture, free space on the current working-directory volume, and version-check results for Python, Git, and (on Windows) WinGet. It is observational only. Free space is not an installer-size estimate, and a tool's version command failing does not prove that every installation is absent.
+`handler setup scan` reports the current platform, compiler-visible architecture, free space on the current working-directory volume, and trusted executable-path discovery for Python launchers/interpreters, Git, CMake, Node/npm, and (on Windows) WinGet. Version-qualified Python candidates are shown when present so side-by-side installations can be spotted without running a package manager. It is observational only and does not invoke detected tools. Free space is not an installer-size estimate. Discovery is limited to trusted executable paths exposed by the current PATH; it is not a complete registry-based inventory of every Python installation.
 
 ## Profiles
 
