@@ -1,5 +1,5 @@
 #include "handler/developer_setup.h"
-#include "handler/command_engine.h"
+#include "handler/component_discovery.h"
 
 #include <algorithm>
 #include <iostream>
@@ -165,22 +165,37 @@ std::vector<HostCheck> inspectDeveloperHost() {
     } else {
         checks.push_back({"Disk space", "UNKNOWN", "Unable to query free space"});
     }
-    for (const auto& tool : std::vector<std::string>{"python", "git", "winget"}) {
+    // Discovery is read-only and uses Handler's trusted executable-path checks.
+    // Include version-qualified Python names so side-by-side installations can be
+    // surfaced without invoking arbitrary commands or changing PATH.
+    const std::vector<std::string> candidates{
+        "python", "python3", "python3.14", "python3.13", "python3.12",
+        "python3.11", "py", "git", "winget", "cmake", "node", "npm"
+    };
+    const auto discovered = discoverComponents(candidates);
+    for (const auto& candidate : candidates) {
+        const auto found = std::find_if(discovered.begin(), discovered.end(),
+            [&](const Component& component) { return component.name == candidate; });
+        if (candidate == "winget") {
 #ifndef _WIN32
-        if (tool == "winget") {
             checks.push_back({"WinGet", "UNAVAILABLE", "WinGet is Windows-only"});
+#else
+            checks.push_back({"WinGet", found == discovered.end() ? "MISSING" : "OK",
+                found == discovered.end() ? "Not found on PATH" : found->path});
+#endif
             continue;
         }
-#endif
-        CommandSpec spec{"developer-setup-preflight", tool, {"--version"},
-                         RiskLevel::Low, 10000};
-        const auto result = executeCommand(spec);
-        const bool ok = result.started && result.exitCode == 0;
-        std::string details = result.output.empty() ? result.error : result.output;
-        const auto newline = details.find_first_of("\r\n");
-        if (newline != std::string::npos) details.resize(newline);
-        if (details.empty()) details = ok ? "version check passed" : "not available or version check failed";
-        checks.push_back({tool, ok ? "OK" : "MISSING", details});
+        const bool pythonCandidate = candidate == "python" || candidate == "python3" ||
+            candidate.rfind("python3.", 0) == 0 || candidate == "py";
+        if (!pythonCandidate && candidate != "git" && candidate != "cmake" &&
+            candidate != "node" && candidate != "npm") continue;
+        if (found == discovered.end()) {
+            if (pythonCandidate && candidate.rfind("python3.", 0) == 0)
+                continue; // Keep the report compact; list versioned interpreters only when present.
+            checks.push_back({candidate, "MISSING", "Not found on PATH"});
+        } else {
+            checks.push_back({candidate, "OK", found->path});
+        }
     }
     return checks;
 }
