@@ -904,3 +904,8 @@ ctest --test-dir build -C Release --output-on-failure
 The test suite includes the core regression executable and CLI-level checks for version/help output, safe and blocked risk classification, dependency inspection, guarded failure diagnostics, unknown snapshots, and missing-argument usage. The guarded CLI tests assert both a nonzero exit code and the expected diagnostic; they do not perform real package upgrades or destructive system operations.
 
 Cross-platform CI runs this suite on Windows, Ubuntu, and macOS. Treat a branch as verified only after the CI run for that exact commit completes successfully.
+
+
+## Developer Setup (v1.0 preview)
+
+Handler includes a Windows-first, read-only developer setup planner and host scanner, plus safe starter project scaffolds. Run `handler setup profiles`, `handler setup plan python`, `handler setup scan`, or `handler setup project python <path>`. The scanner discovers trusted executable paths, including version-qualified Python names when available. Project scaffolding does not install packages or create a virtual environment. WinGet installation execution remains intentionally disabled until transactional recovery and post-install verification are implemented. See [Developer Setup](docs/DEVELOPER_SETUP.md).
