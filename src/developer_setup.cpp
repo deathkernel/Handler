@@ -207,7 +207,7 @@ bool createDeveloperProject(const std::string& templateId,
         details = "Target already exists; Handler will not overwrite existing files.";
         return false;
     }
-    const std::string projectName = safeProjectName(projectName);
+    const std::string projectName = safeProjectName(target.filename().string());
     const auto parent = target.parent_path().empty() ? fs::current_path() : target.parent_path();
     if (!fs::exists(parent, ec) || !fs::is_directory(parent, ec)) {
         details = "Parent directory does not exist or is not a directory.";
