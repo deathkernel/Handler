@@ -514,6 +514,20 @@ int main() {
 
     std::filesystem::remove_all(uninstallRoot, ec);
 
+    const auto hostChecks = inspectDeveloperHost();
+    assert(!hostChecks.empty());
+    bool sawOs = false;
+    bool sawDisk = false;
+    for (const auto& check : hostChecks) {
+        if (check.name == "OS") sawOs = true;
+        if (check.name == "Disk space") sawDisk = true;
+        assert(check.status == "OK" || check.status == "INFO" ||
+               check.status == "UNKNOWN" || check.status == "UNAVAILABLE" ||
+               check.status == "MISSING");
+    }
+    assert(sawOs);
+    assert(sawDisk);
+
     const auto& setupProfiles = developerSetupProfiles();
     assert(setupProfiles.size() >= 5);
     const auto basePlan = planDeveloperSetup("base");
