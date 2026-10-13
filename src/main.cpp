@@ -97,7 +97,7 @@ int runDeveloperSetup(int argc, char* argv[]) {
             "profile=" + plan.profileId + ", packages=" + std::to_string(plan.packages.size()));
         return plan.packages.empty() ? 2 : 0;
     }
-    std::cerr << "Usage: handler setup profiles | handler setup plan <profile>\n";
+    std::cerr << "Usage: handler setup scan | handler setup project <python|web|native> <path> | handler setup profiles | handler setup plan <profile>\n";
     return 2;
 }
 
