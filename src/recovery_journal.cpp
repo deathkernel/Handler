@@ -180,6 +180,10 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 }
 
 bool RecoveryJournal::hasCorruptEntries() const {
+    std::error_code pathError;
+    if (std::filesystem::is_directory(file_, pathError) || pathError)
+        return true;
+
     std::ifstream in(file_);
     if (!in) {
         std::error_code ec;
