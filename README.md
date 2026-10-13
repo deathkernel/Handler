@@ -889,3 +889,23 @@ Missing tools and unsupported ecosystems remain review-only until an explicit in
 
 Handler version is now **0.8.0**.
 
+
+
+## Developer Environment Setup (v1.0 plan)
+
+Handler now includes a read-only developer setup planner for Windows. It previews curated package sets without invoking WinGet or modifying the machine.
+
+```text
+handler setup profiles
+handler setup plan base
+handler setup plan python
+handler setup plan web
+handler setup plan fullstack
+handler setup plan native
+handler setup plan custom
+```
+
+The planner shares Handler's existing deterministic CLI and history model. Installation execution is deliberately not enabled yet: package IDs, architecture, source, privilege needs, free disk space, and existing installations must be validated before a future install flow is implemented.
+
+See [Developer Setup documentation](docs/DEVELOPER_SETUP.md) for profiles, scope, and safety requirements.
+
