@@ -38,4 +38,14 @@ SetupPlan planDeveloperSetup(const std::string& profileId);
 // Print a plan in a human-readable form. Planning never installs packages.
 void printDeveloperSetupPlan(const SetupPlan& plan);
 
+struct HostCheck {
+    std::string name;
+    std::string status;
+    std::string details;
+};
+std::vector<HostCheck> inspectDeveloperHost();
+bool createDeveloperProject(const std::string& templateId,
+                            const std::string& targetDirectory,
+                            std::string& details);
+
 } // namespace handler
