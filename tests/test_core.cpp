@@ -1,3 +1,4 @@
+#include "handler/developer_setup.h"
 #include "handler/command_engine.h"
 #include "handler/action_engine.h"
 #include "handler/executable_trust.h"
@@ -512,6 +513,21 @@ int main() {
     std::filesystem::remove_all(malformedRoot, ec);
 
     std::filesystem::remove_all(uninstallRoot, ec);
+
+    const auto& setupProfiles = developerSetupProfiles();
+    assert(setupProfiles.size() >= 5);
+    const auto basePlan = planDeveloperSetup("base");
+    assert(basePlan.packages.size() == 3);
+    assert(basePlan.packages[0].id == "Python.PythonInstallManager");
+    assert(!basePlan.warnings.empty());
+    const auto webPlan = planDeveloperSetup("web");
+    assert(webPlan.packages.size() == 4);
+    const auto nativePlan = planDeveloperSetup("native");
+    assert(nativePlan.packages.size() == 4);
+    assert(nativePlan.warnings.size() >= 3);
+    const auto invalidSetupPlan = planDeveloperSetup("not-a-profile");
+    assert(invalidSetupPlan.packages.empty());
+    assert(!invalidSetupPlan.warnings.empty());
 
     std::cout << "Handler core tests passed.\n";
     return 0;
