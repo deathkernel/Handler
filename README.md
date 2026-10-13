@@ -905,7 +905,7 @@ handler setup plan native
 handler setup plan custom
 ```
 
-The planner shares Handler's existing deterministic CLI and history model. Installation execution is deliberately not enabled yet: package IDs, architecture, source, privilege needs, free disk space, and existing installations must be validated before a future install flow is implemented.
+The setup increment also includes a read-only host preflight (`handler setup scan`) and safe Python/web/native project scaffolds (`handler setup project <template> <path>`). WinGet installation execution remains disabled until package/source validation, installed-package detection, transaction/recovery integration, and post-install verification are complete.
 
-See [Developer Setup documentation](docs/DEVELOPER_SETUP.md) for profiles, scope, and safety requirements.
+See [Developer Setup documentation](docs/DEVELOPER_SETUP.md) for profiles, commands, scope, and safety boundaries.
 
