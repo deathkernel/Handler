@@ -128,3 +128,11 @@ set_tests_properties(handler_cli_unknown_command PROPERTIES
 add_test(NAME handler_cli_setup_invalid_template COMMAND handler setup project invalid handler-invalid-project)
 set_tests_properties(handler_cli_setup_invalid_template PROPERTIES
     WILL_FAIL TRUE)
+
+add_test(NAME handler_cli_setup_profiles COMMAND handler setup profiles)
+set_tests_properties(handler_cli_setup_profiles PROPERTIES
+    PASS_REGULAR_EXPRESSION "python.*Python Developer")
+
+add_test(NAME handler_cli_setup_plan_python COMMAND handler setup plan python)
+set_tests_properties(handler_cli_setup_plan_python PROPERTIES
+    PASS_REGULAR_EXPRESSION "Planning only")
