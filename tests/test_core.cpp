@@ -619,7 +619,10 @@ int main() {
     assert(doctor.size() == 2);
     assert(!doctor[1].available);
     assert(doctor[1].status == "MISSING");
-    const auto candidates = proposeToolchainRepairs(doctor);
+    const auto candidates = proposeToolchainRepairs({
+        {"python", true, "python", "3.x", "HEALTHY", "deterministic test fixture"},
+        {"definitely-not-a-handler-tool", false, {}, {}, "MISSING", "not found"}
+    });
     assert(candidates.size() == 2);
     assert(candidates[0].tool == "python");
     assert(candidates[0].supported);
