@@ -950,29 +950,31 @@ int main(int argc, char* argv[]) {
     }
 
     if (command == "recover") {
-        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) {
             std::cerr << "Usage: handler recover <error text>\n";
             return 2;
         }
+        if (mutationBlockedByInterruptedTransaction()) return 1;
         return handler::autoRecover(joinArguments(argc, argv, 2));
     }
 
     if (command == "repair") {
-        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 4) {
             std::cerr << "Usage: handler repair <python-module|node-module> <package>\n";
             return 2;
         }
-        if (std::string(argv[2]) == "python-module")
+        const std::string target = argv[2];
+        if (target != "python-module" && target != "node-module") {
+            std::cerr << "Unknown repair target: " << target << "\n";
+            return 2;
+        }
+        if (mutationBlockedByInterruptedTransaction()) return 1;
+        if (target == "python-module")
             return handler::repairPythonModule(argv[3]);
-        if (std::string(argv[2]) == "node-module")
-            return handler::repairNodeModule(argv[3]);
-        std::cerr << "Unknown repair target: " << argv[2] << "\n";
-        return 2;
+        return handler::repairNodeModule(argv[3]);
     }
 
-    if (command == "temp-cleanup" && argc >= 3 &&
+        if (command == "temp-cleanup" && argc >= 3 &&
         std::string(argv[2]) == "--dry-run")
         return runTempCleanup(true);
 
@@ -1016,7 +1018,6 @@ int main(int argc, char* argv[]) {
     if (command == "project") return runProject();
     if (command == "deps") return runDeps(argc, argv);
     if (command == "dependency-upgrade") {
-        if (mutationBlockedByInterruptedTransaction()) return 1;
         if (argc < 3) { std::cerr << "Usage: handler dependency-upgrade <package>\n"; return 2; }
         const auto context = currentProject();
         if (context.root.empty()) { std::cerr << "No supported project detected.\n"; return 1; }
@@ -1030,7 +1031,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Dependency upgrade blocked: package is not declared by the current project.\n";
         return 3;
     }
-    if (command == "graph") return runGraph();
+        if (command == "graph") return runGraph();
 
     const int result = router.dispatch(command);
     if (result == 127) {
