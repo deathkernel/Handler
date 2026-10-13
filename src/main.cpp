@@ -1,3 +1,4 @@
+#include "handler/developer_setup.h"
 #include "handler/tool_updates.h"
 #include "handler/risky_command.h"
 #include "handler/safe_mode.h"
@@ -57,6 +58,27 @@ void printDecisions(const std::vector<handler::Decision>& decisions) {
     for (const auto& d : decisions)
         std::cout << d.action << " | risk=" << static_cast<int>(d.risk)
                   << " | " << d.reason << "\n";
+}
+
+int runDeveloperSetup(int argc, char* argv[]) {
+    if (argc == 3 && std::string(argv[2]) == "profiles") {
+        std::cout << "Developer setup profiles (preview only)\n"
+                  << "---------------------------------------\n";
+        for (const auto& profile : handler::developerSetupProfiles())
+            std::cout << "  " << profile.id << " - " << profile.name
+                      << ": " << profile.description << "\n";
+        std::cout << "\nUse: handler setup plan <profile>\n";
+        return 0;
+    }
+    if (argc == 4 && std::string(argv[2]) == "plan") {
+        const auto plan = handler::planDeveloperSetup(argv[3]);
+        handler::printDeveloperSetupPlan(plan);
+        makeHistory().record("DEVELOPER_SETUP_PLAN",
+            "profile=" + plan.profileId + ", packages=" + std::to_string(plan.packages.size()));
+        return plan.packages.empty() ? 2 : 0;
+    }
+    std::cerr << "Usage: handler setup profiles | handler setup plan <profile>\\n";
+    return 2;
 }
 
 int runUpdates() {
@@ -495,6 +517,8 @@ void printUsage() {
         << "  handler toolchain-repair <tool> Repair a supported installed toolchain\n"
         << "  handler uninstall <python|node> <package> [--dry-run] Remove a direct project dependency safely\n"
         << "  handler updates                Inspect tool updates\n"
+        << "  handler setup profiles         List developer setup profiles\n"
+        << "  handler setup plan <profile>   Preview packages; does not install\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
         << "  handler repair python-module <package> Repair a Python module safely\n"
         << "  handler repair node-module <package>   Repair a Node module in the detected project\n"
@@ -921,6 +945,7 @@ int main(int argc, char* argv[]) {
     }
     if (command == "doctor") return runDoctor();
     if (command == "updates") return runUpdates();
+    if (command == "setup") return runDeveloperSetup(argc, argv);
     if (command == "risk") {
         if (argc < 3) return 2;
         return runRisk(joinArguments(argc, argv, 2));
