@@ -61,6 +61,26 @@ void printDecisions(const std::vector<handler::Decision>& decisions) {
 }
 
 int runDeveloperSetup(int argc, char* argv[]) {
+    if (argc == 3 && std::string(argv[2]) == "scan") {
+        std::cout << "Developer environment preflight (read-only)\n"
+                  << "------------------------------------------\n";
+        bool missing = false;
+        for (const auto& check : handler::inspectDeveloperHost()) {
+            std::cout << "[" << check.status << "] " << check.name
+                      << ": " << check.details << "\n";
+            if (check.status == "MISSING") missing = true;
+        }
+        makeHistory().record("DEVELOPER_SETUP_SCAN", "host preflight completed");
+        return missing ? 1 : 0;
+    }
+    if (argc == 5 && std::string(argv[2]) == "project") {
+        std::string details;
+        const bool ok = handler::createDeveloperProject(argv[3], argv[4], details);
+        std::cout << details << "\n";
+        makeHistory().record(ok ? "DEVELOPER_PROJECT_CREATED" : "DEVELOPER_PROJECT_FAILED",
+                             std::string("template=") + argv[3]);
+        return ok ? 0 : 1;
+    }
     if (argc == 3 && std::string(argv[2]) == "profiles") {
         std::cout << "Developer setup profiles (preview only)\n"
                   << "---------------------------------------\n";
@@ -517,6 +537,8 @@ void printUsage() {
         << "  handler toolchain-repair <tool> Repair a supported installed toolchain\n"
         << "  handler uninstall <python|node> <package> [--dry-run] Remove a direct project dependency safely\n"
         << "  handler updates                Inspect tool updates\n"
+        << "  handler setup scan             Read-only host and disk preflight\n"
+        << "  handler setup project <python|web|native> <path> Create a safe project scaffold\n"
         << "  handler setup profiles         List developer setup profiles\n"
         << "  handler setup plan <profile>   Preview packages; does not install\n"
         << "  handler risk <command>         Inspect risky command patterns\n"
