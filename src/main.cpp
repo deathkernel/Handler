@@ -604,6 +604,10 @@ void printUsage() {
         << "  handler temp-cleanup           Safely clean %TEMP%\n"
         << "  handler temp-cleanup --dry-run Preview TEMP cleanup\n"
         << "  handler maintenance            Run maintenance every 2 hours\n"
+        << "  handler schedule list          List persisted scheduled tasks\n"
+        << "  handler schedule add <id> <minutes> <command>  Add a safe recurring task\n"
+        << "  handler schedule remove <id>   Remove a scheduled task\n"
+        << "  handler schedule run-due       Run due tasks sequentially\n"
         << "  handler state                  Capture current environment state\n"
         << "  handler detect-error <text>    Detect known error patterns\n"
         << "  handler discover [tools...]    Discover tools on PATH\n"
@@ -1018,7 +1022,8 @@ handler::ModuleRegistry buildModules() {
     registry.registerModule("modules", [] {
         std::cout << "Registered modules (activated on demand):\n"
                   << "  health\n  self-check\n  temp-cleanup\n"
-                  << "  maintenance\n  state\n  status\n  history\n  version\n  modules\n";
+                  << "  maintenance\n  state\n  status\n  history\n  version\n"
+                  << "  doctor\n  updates\n  protect\n  discover\n  project\n  graph\n  modules\n";
         return 0;
     });
     return registry;
