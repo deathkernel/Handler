@@ -42,6 +42,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <limits>
+#include <stdexcept>
 
 namespace {
 constexpr const char* kVersion = "0.9.0";
@@ -472,7 +474,7 @@ int runCommand(const std::string& executable,
 int runSchedule(int argc, char* argv[],
                 const handler::ModuleRegistry& registry) {
     if (argc < 3) {
-        std::cerr << "Usage: handler schedule <list|add|remove|run-due> [arguments...]\\n";
+        std::cerr << "Usage: handler schedule <list|add|remove|run-due> [arguments...]\n";
         return 2;
     }
 
@@ -483,26 +485,26 @@ int runSchedule(int argc, char* argv[],
     if (action == "list") {
         std::vector<handler::ScheduledTask> tasks;
         if (!scheduler.listTasks(tasks, error)) {
-            std::cerr << "Schedule read failed: " << error << "\\n";
+            std::cerr << "Schedule read failed: " << error << "\n";
             return 1;
         }
         if (tasks.empty()) {
-            std::cout << "No scheduled tasks.\\n";
+            std::cout << "No scheduled tasks.\n";
             return 0;
         }
-        std::cout << "Scheduled tasks (intervals in minutes)\\n"
-                  << "----------------------------------------\\n";
+        std::cout << "Scheduled tasks (intervals in minutes)\n"
+                  << "----------------------------------------\n";
         for (const auto& task : tasks) {
             std::cout << task.id << " | every " << task.intervalMinutes
                       << " min | command=" << task.command
-                      << " | last-run-epoch=" << task.lastRunEpoch << "\\n";
+                      << " | last-run-epoch=" << task.lastRunEpoch << "\n";
         }
         return 0;
     }
 
     if (action == "add") {
         if (argc != 6) {
-            std::cerr << "Usage: handler schedule add <id> <interval-minutes> <safe-command>\\n";
+            std::cerr << "Usage: handler schedule add <id> <interval-minutes> <safe-command>\n";
             return 2;
         }
         std::uint32_t interval = 0;
@@ -515,42 +517,42 @@ int runSchedule(int argc, char* argv[],
             }
             interval = static_cast<std::uint32_t>(parsed);
         } catch (...) {
-            std::cerr << "Invalid interval. Use 1 to 10080 minutes.\\n";
+            std::cerr << "Invalid interval. Use 1 to 10080 minutes.\n";
             return 2;
         }
 
         const auto now = static_cast<std::int64_t>(std::chrono::duration_cast<
             std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
         if (!scheduler.addTask(argv[3], interval, argv[5], now, error)) {
-            std::cerr << "Schedule add blocked: " << error << "\\n";
+            std::cerr << "Schedule add blocked: " << error << "\n";
             return 3;
         }
         makeHistory().record("SCHEDULE_ADDED",
             std::string(argv[3]) + " | every=" + std::to_string(interval) +
             "m | command=" + argv[5]);
         std::cout << "Scheduled task added: " << argv[3]
-                  << " (first run after " << interval << " minutes).\\n";
+                  << " (first run after " << interval << " minutes).\n";
         return 0;
     }
 
     if (action == "remove") {
         if (argc != 4) {
-            std::cerr << "Usage: handler schedule remove <id>\\n";
+            std::cerr << "Usage: handler schedule remove <id>\n";
             return 2;
         }
         if (!scheduler.removeTask(argv[3], error)) {
-            std::cerr << "Schedule remove failed: " << error << "\\n";
+            std::cerr << "Schedule remove failed: " << error << "\n";
             return 1;
         }
         makeHistory().record("SCHEDULE_REMOVED", argv[3]);
-        std::cout << "Scheduled task removed: " << argv[3] << "\\n";
+        std::cout << "Scheduled task removed: " << argv[3] << "\n";
         return 0;
     }
 
     if (action == "run-due") {
         handler::TransactionLock lock(stateRoot() / "scheduler.lock");
         if (!lock.acquire()) {
-            std::cout << "Another scheduler tick is active; skipping this tick.\\n";
+            std::cout << "Another scheduler tick is active; skipping this tick.\n";
             return 0;
         }
 
@@ -558,11 +560,11 @@ int runSchedule(int argc, char* argv[],
             std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
         std::vector<handler::ScheduledTask> due;
         if (!scheduler.dueTasks(now, due, error)) {
-            std::cerr << "Schedule check failed closed: " << error << "\\n";
+            std::cerr << "Schedule check failed closed: " << error << "\n";
             return 1;
         }
         if (due.empty()) {
-            std::cout << "No scheduled tasks due.\\n";
+            std::cout << "No scheduled tasks due.\n";
             return 0;
         }
 
@@ -571,25 +573,25 @@ int runSchedule(int argc, char* argv[],
             // Record before dispatch to avoid duplicate execution after a crash.
             if (!scheduler.markTaskRun(task.id, now, error)) {
                 std::cerr << "Could not record scheduled run for " << task.id
-                          << ": " << error << "\\n";
+                          << ": " << error << "\n";
                 failed = true;
                 continue;
             }
-            std::cout << "\\n[RUN] " << task.id << " -> " << task.command << "\\n";
+            std::cout << "\n[RUN] " << task.id << " -> " << task.command << "\n";
             const int result = registry.run(task.command);
             makeHistory().record(result == 0 ? "SCHEDULED_TASK_SUCCESS"
                                              : "SCHEDULED_TASK_FAILED",
                 task.id + " | command=" + task.command +
                 " | exit=" + std::to_string(result));
             std::cout << (result == 0 ? "[OK] " : "[FAILED] ")
-                      << task.id << " (exit " << result << ")\\n";
+                      << task.id << " (exit " << result << ")\n";
             if (result != 0) failed = true;
         }
         return failed ? 1 : 0;
     }
 
-    std::cerr << "Unknown schedule action: " << action << "\\n"
-              << "Usage: handler schedule <list|add|remove|run-due>\\n";
+    std::cerr << "Unknown schedule action: " << action << "\n"
+              << "Usage: handler schedule <list|add|remove|run-due>\n";
     return 2;
 }
 
@@ -1037,23 +1039,23 @@ int main(int argc, char* argv[]) {
 
     if (command == "path-audit") return runPathAudit();
     if (command == "env-baseline") {
-        if (argc < 4) { std::cerr << "Usage: handler env-baseline <file> <name...>\\n"; return 2; }
+        if (argc < 4) { std::cerr << "Usage: handler env-baseline <file> <name...>\n"; return 2; }
         std::vector<std::string> names;
         for (int i = 3; i < argc; ++i) names.emplace_back(argv[i]);
         return runEnvironmentBaseline(argv[2], names);
     }
     if (command == "env-audit") {
-        if (argc < 3) { std::cerr << "Usage: handler env-audit <file>\\n"; return 2; }
+        if (argc < 3) { std::cerr << "Usage: handler env-audit <file>\n"; return 2; }
         return runEnvironmentAudit(argv[2]);
     }
     if (command == "env-repair") {
         if (mutationBlockedByInterruptedTransaction()) return 1;
-        if (argc < 3) { std::cerr << "Usage: handler env-repair <file> [--user]\\n"; return 2; }
+        if (argc < 3) { std::cerr << "Usage: handler env-repair <file> [--user]\n"; return 2; }
         return runEnvironmentRepair(argv[2], argc >= 4 && std::string(argv[3]) == "--user");
     }
     if (command == "path-repair") {
         if (mutationBlockedByInterruptedTransaction()) return 1;
-        if (argc < 3) { std::cerr << "Usage: handler path-repair <baseline-file>\\n"; return 2; }
+        if (argc < 3) { std::cerr << "Usage: handler path-repair <baseline-file>\n"; return 2; }
         return runPathRepair(argv[2]);
     }
     if (command == "protect") return runProtection();
@@ -1067,7 +1069,7 @@ int main(int argc, char* argv[]) {
     }
     if (command == "toolchain-repair") {
         if (mutationBlockedByInterruptedTransaction()) return 1;
-        if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\\n"; return 2; }
+        if (argc < 3) { std::cerr << "Usage: handler toolchain-repair <tool>\n"; return 2; }
         return runToolchainRepair(argv[2]);
     }
     if (command == "doctor-repair") {
