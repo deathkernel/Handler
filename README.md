@@ -628,6 +628,40 @@ Handler should not generate, validate, or resolve commands that are unrelated to
 14. **Reuse before reinstall** — discover existing compatible components before creating unnecessary duplicates.
 15. **Never break intentional isolation** — safe reuse must respect project and environment boundaries.
 
+## Scheduled Tasks and Windows Startup
+
+Handler can persist a small recurring queue and run due tasks one at a time. The first version deliberately schedules only non-destructive built-in diagnostics and state reporting; it does not execute arbitrary shell commands.
+
+### Add and manage tasks
+
+```text
+handler schedule add hourly-check 60 self-check
+handler schedule add daily-health 1440 health
+handler schedule list
+handler schedule remove hourly-check
+handler schedule run-due
+```
+
+Intervals are measured in minutes (1–10,080). A task's first run is due after its configured interval. The scheduler stores task definitions and last-run timestamps under the current user's Handler state directory.
+
+Only these built-in commands are eligible for unattended scheduling: health, self-check, state, status, history, version, modules, doctor, updates, protect, discover, project, and graph. Cleanup, installs/updates, repairs, uninstall, rollback, and arbitrary process execution are rejected by the schedule store and remain subject to interactive approval.
+
+### Enable automatic startup checks on Windows
+
+After building Handler, run PowerShell from the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-startup.ps1 -ExePath .\build\Release\handler.exe
+```
+
+The per-user installer registers a Task Scheduler check every minute and another check at logon. The process exits after checking due tasks; it is not a permanent background daemon. To remove the scheduled tasks:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-startup.ps1
+```
+
+The installer does not request administrator elevation. Review the script before running it, and use the uninstall script to remove its two Task Scheduler entries.
+
 ## Planned Architecture
 
 Handler is expected to evolve around these logical components:
