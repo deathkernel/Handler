@@ -218,7 +218,7 @@ int main() {
     assert(!identityJournal.hasUnfinishedTransaction());
     {
         std::ofstream corrupt(journalIdentityFile, std::ios::app);
-        corrupt << "corrupt journal record without delimiters\\n";
+        corrupt << "corrupt journal record without delimiters\n";
     }
     assert(identityJournal.hasCorruptEntries());
     assert(identityJournal.hasUnfinishedTransaction());
@@ -256,7 +256,7 @@ int main() {
     assert(!journalTest.record("UNKNOWN_STAGE", "test"));
     {
         std::ofstream unknown(journalTestFile, std::ios::app);
-        unknown << "2026-10-07T00:00:00Z | UNKNOWN_STAGE | injected\\n";
+        unknown << "2026-10-07T00:00:00Z | UNKNOWN_STAGE | injected\n";
     }
     assert(journalTest.hasCorruptEntries());
     assert(journalTest.hasUnfinishedTransaction());
@@ -740,7 +740,7 @@ int main() {
     const auto malformedScheduleFile = schedulerRoot / "malformed.db";
     {
         std::ofstream malformedSchedule(malformedScheduleFile);
-        malformedSchedule << "bad|not-a-number|health|not-a-time\\n";
+        malformedSchedule << "bad|not-a-number|health|not-a-time\n";
     }
     TaskScheduler malformedScheduler(malformedScheduleFile);
     assert(!malformedScheduler.listTasks(scheduled, scheduleError));
