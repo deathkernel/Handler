@@ -33,6 +33,7 @@
 #include "handler/repair.h"
 #include "handler/auto_recovery.h"
 #include "handler/state_paths.h"
+#include "handler/scheduler.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -467,6 +468,131 @@ int runCommand(const std::string& executable,
     return result.started ? result.exitCode : 1;
 }
 
+
+int runSchedule(int argc, char* argv[],
+                const handler::ModuleRegistry& registry) {
+    if (argc < 3) {
+        std::cerr << "Usage: handler schedule <list|add|remove|run-due> [arguments...]\\n";
+        return 2;
+    }
+
+    handler::TaskScheduler scheduler(stateRoot() / "scheduled_tasks.db");
+    const std::string action = argv[2];
+    std::string error;
+
+    if (action == "list") {
+        std::vector<handler::ScheduledTask> tasks;
+        if (!scheduler.listTasks(tasks, error)) {
+            std::cerr << "Schedule read failed: " << error << "\\n";
+            return 1;
+        }
+        if (tasks.empty()) {
+            std::cout << "No scheduled tasks.\\n";
+            return 0;
+        }
+        std::cout << "Scheduled tasks (intervals in minutes)\\n"
+                  << "----------------------------------------\\n";
+        for (const auto& task : tasks) {
+            std::cout << task.id << " | every " << task.intervalMinutes
+                      << " min | command=" << task.command
+                      << " | last-run-epoch=" << task.lastRunEpoch << "\\n";
+        }
+        return 0;
+    }
+
+    if (action == "add") {
+        if (argc != 6) {
+            std::cerr << "Usage: handler schedule add <id> <interval-minutes> <safe-command>\\n";
+            return 2;
+        }
+        std::uint32_t interval = 0;
+        try {
+            std::size_t consumed = 0;
+            const auto parsed = std::stoul(argv[4], &consumed);
+            if (consumed != std::string(argv[4]).size() ||
+                parsed > std::numeric_limits<std::uint32_t>::max()) {
+                throw std::invalid_argument("invalid interval");
+            }
+            interval = static_cast<std::uint32_t>(parsed);
+        } catch (...) {
+            std::cerr << "Invalid interval. Use 1 to 10080 minutes.\\n";
+            return 2;
+        }
+
+        const auto now = static_cast<std::int64_t>(std::chrono::duration_cast<
+            std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        if (!scheduler.addTask(argv[3], interval, argv[5], now, error)) {
+            std::cerr << "Schedule add blocked: " << error << "\\n";
+            return 3;
+        }
+        makeHistory().record("SCHEDULE_ADDED",
+            std::string(argv[3]) + " | every=" + std::to_string(interval) +
+            "m | command=" + argv[5]);
+        std::cout << "Scheduled task added: " << argv[3]
+                  << " (first run after " << interval << " minutes).\\n";
+        return 0;
+    }
+
+    if (action == "remove") {
+        if (argc != 4) {
+            std::cerr << "Usage: handler schedule remove <id>\\n";
+            return 2;
+        }
+        if (!scheduler.removeTask(argv[3], error)) {
+            std::cerr << "Schedule remove failed: " << error << "\\n";
+            return 1;
+        }
+        makeHistory().record("SCHEDULE_REMOVED", argv[3]);
+        std::cout << "Scheduled task removed: " << argv[3] << "\\n";
+        return 0;
+    }
+
+    if (action == "run-due") {
+        handler::TransactionLock lock(stateRoot() / "scheduler.lock");
+        if (!lock.acquire()) {
+            std::cout << "Another scheduler tick is active; skipping this tick.\\n";
+            return 0;
+        }
+
+        const auto now = static_cast<std::int64_t>(std::chrono::duration_cast<
+            std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        std::vector<handler::ScheduledTask> due;
+        if (!scheduler.dueTasks(now, due, error)) {
+            std::cerr << "Schedule check failed closed: " << error << "\\n";
+            return 1;
+        }
+        if (due.empty()) {
+            std::cout << "No scheduled tasks due.\\n";
+            return 0;
+        }
+
+        bool failed = false;
+        for (const auto& task : due) {
+            // Record before dispatch to avoid duplicate execution after a crash.
+            if (!scheduler.markTaskRun(task.id, now, error)) {
+                std::cerr << "Could not record scheduled run for " << task.id
+                          << ": " << error << "\\n";
+                failed = true;
+                continue;
+            }
+            std::cout << "\\n[RUN] " << task.id << " -> " << task.command << "\\n";
+            const int result = registry.run(task.command);
+            makeHistory().record(result == 0 ? "SCHEDULED_TASK_SUCCESS"
+                                             : "SCHEDULED_TASK_FAILED",
+                task.id + " | command=" + task.command +
+                " | exit=" + std::to_string(result));
+            std::cout << (result == 0 ? "[OK] " : "[FAILED] ")
+                      << task.id << " (exit " << result << ")\\n";
+            if (result != 0) failed = true;
+        }
+        return failed ? 1 : 0;
+    }
+
+    std::cerr << "Unknown schedule action: " << action << "\\n"
+              << "Usage: handler schedule <list|add|remove|run-due>\\n";
+    return 2;
+}
+
 void printUsage() {
     std::cout
         << "Handler - Developer Environment Guardian\n\n"
@@ -877,6 +1003,16 @@ handler::ModuleRegistry buildModules() {
         std::cout << "Handler " << kVersion << "\n";
         return 0;
     });
+
+    registry.registerModule("doctor", runDoctor);
+    registry.registerModule("updates", runUpdates);
+    registry.registerModule("protect", runProtection);
+    registry.registerModule("discover", [] {
+        return runDiscover({"python", "node", "git", "cmake", "dotnet",
+                            "java", "go", "cargo"});
+    });
+    registry.registerModule("project", runProject);
+    registry.registerModule("graph", runGraph);
     registry.registerModule("modules", [] {
         std::cout << "Registered modules (activated on demand):\n"
                   << "  health\n  self-check\n  temp-cleanup\n"
@@ -896,6 +1032,8 @@ int main(int argc, char* argv[]) {
         return router.dispatch("help");
 
     const std::string command = argv[1];
+
+    if (command == "schedule") return runSchedule(argc, argv, registry);
 
     if (command == "path-audit") return runPathAudit();
     if (command == "env-baseline") {
