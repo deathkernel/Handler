@@ -15,6 +15,7 @@
 #include "handler/transaction.h"
 #include "handler/recovery_journal.h"
 #include "handler/transaction_lock.h"
+#include "handler/scheduler.h"
 
 #include "handler/component_discovery.h"
 #include "handler/system_info.h"
@@ -690,6 +691,61 @@ int main() {
     std::filesystem::remove_all(malformedRoot, ec);
 
     std::filesystem::remove_all(uninstallRoot, ec);
+
+
+    const auto schedulerRoot = std::filesystem::temp_directory_path() / "handler-scheduler-core-test";
+    std::filesystem::remove_all(schedulerRoot, ec);
+    std::filesystem::create_directories(schedulerRoot, ec);
+    assert(!ec);
+    const auto scheduleFile = schedulerRoot / "scheduled_tasks.db";
+    TaskScheduler taskScheduler(scheduleFile);
+    const std::int64_t scheduleStart = 1700000000;
+    std::string scheduleError;
+    std::vector<ScheduledTask> scheduled;
+
+    assert(isSafeScheduledCommand("health"));
+    assert(isSafeScheduledCommand("doctor"));
+    assert(!isSafeScheduledCommand("temp-cleanup"));
+    assert(!isSafeScheduledCommand("repair"));
+    assert(!isSafeScheduledCommand("powershell"));
+
+    assert(!taskScheduler.addTask("../invalid", 60, "health", scheduleStart, scheduleError));
+    assert(!taskScheduler.addTask("unsafe-task", 60, "temp-cleanup", scheduleStart, scheduleError));
+    assert(!taskScheduler.addTask("zero-interval", 0, "health", scheduleStart, scheduleError));
+    assert(!taskScheduler.addTask("too-long", 10081, "health", scheduleStart, scheduleError));
+    assert(taskScheduler.addTask("hourly-health", 60, "health", scheduleStart, scheduleError));
+    assert(!taskScheduler.addTask("hourly-health", 60, "health", scheduleStart, scheduleError));
+    assert(taskScheduler.listTasks(scheduled, scheduleError));
+    assert(scheduled.size() == 1);
+    assert(scheduled.front().id == "hourly-health");
+    assert(scheduled.front().lastRunEpoch == scheduleStart);
+
+    assert(taskScheduler.dueTasks(scheduleStart + 3599, scheduled, scheduleError));
+    assert(scheduled.empty());
+    assert(taskScheduler.dueTasks(scheduleStart + 3600, scheduled, scheduleError));
+    assert(scheduled.size() == 1);
+    assert(scheduled.front().command == "health");
+
+    assert(taskScheduler.markTaskRun("hourly-health", scheduleStart + 3600, scheduleError));
+    assert(taskScheduler.dueTasks(scheduleStart + 3600 + 3599, scheduled, scheduleError));
+    assert(scheduled.empty());
+    assert(taskScheduler.dueTasks(scheduleStart + 7200, scheduled, scheduleError));
+    assert(scheduled.size() == 1);
+
+    assert(taskScheduler.removeTask("hourly-health", scheduleError));
+    assert(taskScheduler.listTasks(scheduled, scheduleError));
+    assert(scheduled.empty());
+    assert(!taskScheduler.removeTask("hourly-health", scheduleError));
+
+    const auto malformedScheduleFile = schedulerRoot / "malformed.db";
+    {
+        std::ofstream malformedSchedule(malformedScheduleFile);
+        malformedSchedule << "bad|not-a-number|health|not-a-time\\n";
+    }
+    TaskScheduler malformedScheduler(malformedScheduleFile);
+    assert(!malformedScheduler.listTasks(scheduled, scheduleError));
+    assert(scheduled.empty());
+    std::filesystem::remove_all(schedulerRoot, ec);
 
     std::cout << "Handler core tests passed.\n";
     return 0;
