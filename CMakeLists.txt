@@ -25,6 +25,7 @@ add_executable(handler
     src/snapshot.cpp
     src/transaction.cpp
     src/transaction_lock.cpp
+    src/scheduler.cpp
     src/recovery_journal.cpp
     src/command_engine.cpp
     src/action_engine.cpp
@@ -85,6 +86,7 @@ add_executable(handler_tests
     src/system_info.cpp
     src/transaction.cpp
     src/transaction_lock.cpp
+    src/scheduler.cpp
     src/recovery_journal.cpp
     src/uninstall.cpp
     src/project_context.cpp
@@ -131,6 +133,21 @@ add_test(NAME handler_cli_unknown_command
         -DHANDLER=$<TARGET_FILE:handler>
         "-DARGS=handler-test-unknown-command"
         "-DEXPECTED=Unknown Handler command"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+
+add_test(NAME handler_cli_schedule_missing_action
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=schedule"
+        "-DEXPECTED=Usage: handler schedule"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_schedule_blocks_unsafe_command
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=schedule;add;blocked-task;1;temp-cleanup"
+        "-DEXPECTED=Command is not approved for unattended execution"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
 # CLI regression checks for project inspection and guarded failure paths.
