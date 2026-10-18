@@ -135,6 +135,21 @@ add_test(NAME handler_cli_unknown_command
         "-DEXPECTED=Unknown Handler command"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
 
+
+add_test(NAME handler_cli_schedule_missing_action
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=schedule"
+        "-DEXPECTED=Usage: handler schedule"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
+add_test(NAME handler_cli_schedule_blocks_unsafe_command
+    COMMAND ${CMAKE_COMMAND}
+        -DHANDLER=$<TARGET_FILE:handler>
+        "-DARGS=schedule;add;blocked-task;1;temp-cleanup"
+        "-DEXPECTED=Command is not approved for unattended execution"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/assert_cli_failure.cmake")
+
 # CLI regression checks for project inspection and guarded failure paths.
 add_test(NAME handler_cli_dependency_inspection COMMAND handler deps)
 set_tests_properties(handler_cli_dependency_inspection PROPERTIES
