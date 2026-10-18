@@ -1,3 +1,4 @@
+#include "handler/developer_setup.h"
 #include "handler/command_engine.h"
 #include "handler/action_engine.h"
 #include "handler/executable_trust.h"
@@ -690,6 +691,57 @@ int main() {
     std::filesystem::remove_all(malformedRoot, ec);
 
     std::filesystem::remove_all(uninstallRoot, ec);
+
+    const auto hostChecks = inspectDeveloperHost();
+    assert(!hostChecks.empty());
+    bool sawOs = false;
+    bool sawDisk = false;
+    for (const auto& check : hostChecks) {
+        if (check.name == "OS") sawOs = true;
+        if (check.name == "Disk space") sawDisk = true;
+        assert(check.status == "OK" || check.status == "INFO" ||
+               check.status == "UNKNOWN" || check.status == "UNAVAILABLE" ||
+               check.status == "MISSING");
+    }
+    assert(sawOs);
+    assert(sawDisk);
+
+    const auto& setupProfiles = developerSetupProfiles();
+    assert(setupProfiles.size() >= 5);
+    const auto basePlan = planDeveloperSetup("base");
+    assert(basePlan.packages.size() == 3);
+    assert(basePlan.packages[0].id == "Python.PythonInstallManager");
+    assert(!basePlan.warnings.empty());
+    const auto webPlan = planDeveloperSetup("web");
+    assert(webPlan.packages.size() == 4);
+    const auto nativePlan = planDeveloperSetup("native");
+    assert(nativePlan.packages.size() == 4);
+    assert(nativePlan.warnings.size() >= 3);
+    const auto invalidSetupPlan = planDeveloperSetup("not-a-profile");
+    assert(invalidSetupPlan.packages.empty());
+    assert(!invalidSetupPlan.warnings.empty());
+
+    const auto scaffoldRoot = std::filesystem::temp_directory_path() / "handler_setup_scaffold_test";
+    std::filesystem::remove_all(scaffoldRoot, ec);
+    std::filesystem::create_directories(scaffoldRoot, ec);
+    assert(!ec);
+    std::string scaffoldDetails;
+    const auto pythonProject = scaffoldRoot / "sample-python";
+    assert(createDeveloperProject("python", pythonProject.string(), scaffoldDetails));
+    assert(std::filesystem::exists(pythonProject / "pyproject.toml"));
+    assert(std::filesystem::exists(pythonProject / "src" / "main.py"));
+    assert(std::filesystem::exists(pythonProject / "tests" / "test_smoke.py"));
+    assert(!createDeveloperProject("python", pythonProject.string(), scaffoldDetails));
+    assert(scaffoldDetails.find("already exists") != std::string::npos);
+    const auto webProject = scaffoldRoot / "sample-web";
+    assert(createDeveloperProject("web", webProject.string(), scaffoldDetails));
+    assert(std::filesystem::exists(webProject / "package.json"));
+    const auto nativeProject = scaffoldRoot / "sample-native";
+    assert(createDeveloperProject("native", nativeProject.string(), scaffoldDetails));
+    assert(std::filesystem::exists(nativeProject / "CMakeLists.txt"));
+    assert(!createDeveloperProject("unknown", (scaffoldRoot / "bad").string(), scaffoldDetails));
+    assert(!std::filesystem::exists(scaffoldRoot / "bad"));
+    std::filesystem::remove_all(scaffoldRoot, ec);
 
     std::cout << "Handler core tests passed.\n";
     return 0;

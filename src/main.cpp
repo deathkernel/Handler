@@ -1,3 +1,4 @@
+#include "handler/developer_setup.h"
 #include "handler/tool_updates.h"
 #include "handler/risky_command.h"
 #include "handler/safe_mode.h"
@@ -52,6 +53,48 @@ std::filesystem::path stateRoot() {
 handler::History makeHistory() {
     return handler::History(stateRoot() / "history.log");
 }
+
+int runDeveloperSetup(int argc, char* argv[]) {
+    if (argc == 3 && std::string(argv[2]) == "scan") {
+        std::cout << "Developer environment preflight (read-only)\n"
+                  << "------------------------------------------\n";
+        bool missing = false;
+        for (const auto& check : handler::inspectDeveloperHost()) {
+            std::cout << "[" << check.status << "] " << check.name
+                      << ": " << check.details << "\n";
+            if (check.status == "MISSING") missing = true;
+        }
+        makeHistory().record("DEVELOPER_SETUP_SCAN", "host preflight completed");
+        return missing ? 1 : 0;
+    }
+    if (argc == 5 && std::string(argv[2]) == "project") {
+        std::string details;
+        const bool ok = handler::createDeveloperProject(argv[3], argv[4], details);
+        std::cout << details << "\n";
+        makeHistory().record(ok ? "DEVELOPER_PROJECT_CREATED" : "DEVELOPER_PROJECT_FAILED",
+                             std::string("template=") + argv[3]);
+        return ok ? 0 : 1;
+    }
+    if (argc == 3 && std::string(argv[2]) == "profiles") {
+        std::cout << "Developer setup profiles (preview only)\n"
+                  << "---------------------------------------\n";
+        for (const auto& profile : handler::developerSetupProfiles())
+            std::cout << "  " << profile.id << " - " << profile.name
+                      << ": " << profile.description << "\n";
+        std::cout << "\nUse: handler setup plan <profile>\n";
+        return 0;
+    }
+    if (argc == 4 && std::string(argv[2]) == "plan") {
+        const auto plan = handler::planDeveloperSetup(argv[3]);
+        handler::printDeveloperSetupPlan(plan);
+        makeHistory().record("DEVELOPER_SETUP_PLAN",
+            "profile=" + plan.profileId + ", packages=" + std::to_string(plan.packages.size()));
+        return plan.packages.empty() ? 2 : 0;
+    }
+    std::cerr << "Usage: handler setup scan | handler setup project <python|web|native> <path> | handler setup profiles | handler setup plan <profile>\n";
+    return 2;
+}
+
 
 void printDecisions(const std::vector<handler::Decision>& decisions) {
     for (const auto& d : decisions)
@@ -896,6 +939,8 @@ int main(int argc, char* argv[]) {
         return router.dispatch("help");
 
     const std::string command = argv[1];
+
+    if (command == "setup") return runDeveloperSetup(argc, argv);
 
     if (command == "path-audit") return runPathAudit();
     if (command == "env-baseline") {
