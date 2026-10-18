@@ -138,6 +138,13 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
     bool legacyActive = false;
     std::string line;
     while (std::getline(in, line)) {
+        // A crash can leave a terminal-looking final record without its newline.
+        // Treat an unterminated record as corrupt so it cannot clear recovery state.
+        if (in.eof()) {
+            activeIds.emplace_back();
+            return activeIds;
+        }
+
         const auto first = line.find(" | ");
         if (first == std::string::npos) continue;
         const auto second = line.find(" | ", first + 3);
@@ -192,6 +199,9 @@ bool RecoveryJournal::hasCorruptEntries() const {
 
     std::string line;
     while (std::getline(in, line)) {
+        // Journal records are newline-terminated by record(). A missing final
+        // newline can indicate a torn append, including a partial COMMIT/ROLLBACK.
+        if (in.eof()) return true;
         if (line.empty()) continue;
 
         const auto first = line.find(" | ");

@@ -223,6 +223,17 @@ int main() {
     assert(identityJournal.hasUnfinishedTransaction());
     std::filesystem::remove(journalIdentityFile, testEc);
 
+    // A torn final terminal record must not make an interrupted transaction look complete.
+    {
+        std::ofstream partialTerminal(journalIdentityFile, std::ios::trunc);
+        partialTerminal << "2026-10-07T00:00:00Z | tx=partial-terminal | COMMIT | commit interrupted";
+    }
+    assert(identityJournal.hasCorruptEntries());
+    assert(identityJournal.hasUnfinishedTransaction());
+    const auto partialTerminalIds = identityJournal.unfinishedTransactionIds();
+    assert(partialTerminalIds.size() == 1 && partialTerminalIds.front().empty());
+    std::filesystem::remove(journalIdentityFile, testEc);
+
     const auto journalBlockedRoot = std::filesystem::temp_directory_path() / "handler-journal-parent-file";
     std::filesystem::remove_all(journalBlockedRoot, testEc);
     { std::ofstream blocked(journalBlockedRoot); blocked << "not a directory"; }
