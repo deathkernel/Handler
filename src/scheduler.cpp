@@ -155,7 +155,8 @@ bool TaskScheduler::save(const std::vector<ScheduledTask>& tasks,
         return false;
     }
 
-    auto temporary = file_;\n    temporary += ".tmp";
+    auto temporary = file_;
+    temporary += ".tmp";
     {
         std::ofstream output(temporary, std::ios::trunc);
         if (!output) {
