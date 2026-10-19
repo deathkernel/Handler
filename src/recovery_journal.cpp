@@ -3,6 +3,7 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
@@ -135,7 +136,7 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
     if (!in) return {};
 
     std::vector<std::string> activeIds;
-    bool legacyActive = false;
+    std::size_t legacyActiveCount = 0;
     std::string line;
     while (std::getline(in, line)) {
         const auto first = line.find(" | ");
@@ -157,13 +158,20 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 
         if (isActiveStage(stage)) {
             if (transactionId.empty()) {
-                legacyActive = true;
+                // Legacy entries have no transaction ID. Count START records so
+                // one transaction's terminal record cannot hide another active one.
+                if (stage == "START") {
+                    ++legacyActiveCount;
+                } else if (legacyActiveCount == 0) {
+                    // A truncated legacy journal may begin after START; fail closed.
+                    legacyActiveCount = 1;
+                }
             } else if (std::find(activeIds.begin(), activeIds.end(), transactionId) == activeIds.end()) {
                 activeIds.push_back(transactionId);
             }
         } else if (isTerminalStage(stage)) {
             if (transactionId.empty()) {
-                legacyActive = false;
+                if (legacyActiveCount > 0) --legacyActiveCount;
             } else {
                 activeIds.erase(
                     std::remove(activeIds.begin(), activeIds.end(), transactionId),
@@ -174,8 +182,10 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 
     if (in.bad() && std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
         activeIds.emplace_back();
-    if (legacyActive)
+    if (legacyActiveCount > 0 &&
+        std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end()) {
         activeIds.emplace_back();
+    }
     return activeIds;
 }
 

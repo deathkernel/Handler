@@ -109,6 +109,20 @@ endif()
 
 add_test(NAME handler_core_tests COMMAND handler_tests)
 
+# Keep legacy recovery-journal compatibility coverage isolated from the core test runner.
+add_executable(handler_recovery_journal_legacy_tests
+    tests/test_recovery_journal_legacy.cpp
+    src/recovery_journal.cpp
+)
+target_include_directories(handler_recovery_journal_legacy_tests PRIVATE include)
+if (MSVC)
+    target_compile_options(handler_recovery_journal_legacy_tests PRIVATE /UNDEBUG)
+else()
+    target_compile_options(handler_recovery_journal_legacy_tests PRIVATE -UNDEBUG)
+endif()
+add_test(NAME handler_recovery_journal_legacy_tests
+    COMMAND handler_recovery_journal_legacy_tests)
+
 # CLI smoke/integration coverage: exercise the built executable and its public routing.
 add_test(NAME handler_cli_version COMMAND handler version)
 set_tests_properties(handler_cli_version PROPERTIES
