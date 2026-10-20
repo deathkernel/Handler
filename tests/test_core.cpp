@@ -223,6 +223,26 @@ int main() {
     assert(identityJournal.hasUnfinishedTransaction());
     std::filesystem::remove(journalIdentityFile, testEc);
 
+    // A malformed timestamp must not let a terminal record clear an active transaction.
+    const auto timestampJournalFile =
+        std::filesystem::temp_directory_path() / "handler-recovery-journal-timestamp-test.log";
+    std::filesystem::remove(timestampJournalFile, testEc);
+    RecoveryJournal timestampJournal(timestampJournalFile);
+    const auto timestampTransaction = RecoveryJournal::newTransactionId();
+    assert(timestampJournal.record(timestampTransaction, "START", "begin"));
+    {
+        std::ofstream malformedTimestamp(timestampJournalFile, std::ios::app);
+        malformedTimestamp << "not-a-timestamp | tx=" << timestampTransaction
+                           << " | COMMIT | corrupted terminal record\\n";
+    }
+    assert(timestampJournal.hasCorruptEntries());
+    assert(timestampJournal.hasUnfinishedTransaction());
+    const auto timestampActive = timestampJournal.unfinishedTransactionIds();
+    assert(timestampActive.size() == 2);
+    assert(timestampActive[0] == timestampTransaction);
+    assert(timestampActive[1].empty());
+    std::filesystem::remove(timestampJournalFile, testEc);
+
     const auto journalBlockedRoot = std::filesystem::temp_directory_path() / "handler-journal-parent-file";
     std::filesystem::remove_all(journalBlockedRoot, testEc);
     { std::ofstream blocked(journalBlockedRoot); blocked << "not a directory"; }

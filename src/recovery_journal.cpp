@@ -64,6 +64,22 @@ std::string nextCounter() {
     return std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
 }
 
+bool isValidTimestampFormat(const std::string& timestamp) {
+    if (timestamp.size() != 20) return false;
+
+    constexpr std::size_t digitPositions[] = {
+        0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18
+    };
+    for (const auto position : digitPositions) {
+        if (timestamp[position] < '0' || timestamp[position] > '9')
+            return false;
+    }
+
+    return timestamp[4] == '-' && timestamp[7] == '-' &&
+           timestamp[10] == 'T' && timestamp[13] == ':' &&
+           timestamp[16] == ':' && timestamp[19] == 'Z';
+}
+
 } // namespace
 
 RecoveryJournal::RecoveryJournal(std::filesystem::path file) : file_(std::move(file)) {}
@@ -138,10 +154,22 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
     bool legacyActive = false;
     std::string line;
     while (std::getline(in, line)) {
+        if (line.empty()) continue;
+
         const auto first = line.find(" | ");
-        if (first == std::string::npos) continue;
+        if (first == std::string::npos ||
+            !isValidTimestampFormat(line.substr(0, first))) {
+            // An unattributable or malformed record must keep recovery blocked.
+            if (std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
+                activeIds.emplace_back();
+            continue;
+        }
         const auto second = line.find(" | ", first + 3);
-        if (second == std::string::npos) continue;
+        if (second == std::string::npos) {
+            if (std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
+                activeIds.emplace_back();
+            continue;
+        }
 
         const auto firstField = line.substr(first + 3, second - (first + 3));
         std::string transactionId;
@@ -174,7 +202,8 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 
     if (in.bad() && std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
         activeIds.emplace_back();
-    if (legacyActive)
+    if (legacyActive &&
+        std::find(activeIds.begin(), activeIds.end(), std::string{}) == activeIds.end())
         activeIds.emplace_back();
     return activeIds;
 }
@@ -195,7 +224,9 @@ bool RecoveryJournal::hasCorruptEntries() const {
         if (line.empty()) continue;
 
         const auto first = line.find(" | ");
-        if (first == std::string::npos) return true;
+        if (first == std::string::npos ||
+            !isValidTimestampFormat(line.substr(0, first)))
+            return true;
         const auto second = line.find(" | ", first + 3);
         if (second == std::string::npos) return true;
 
