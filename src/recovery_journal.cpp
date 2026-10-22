@@ -12,6 +12,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -64,6 +65,30 @@ std::string nextCounter() {
     return std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
 }
 
+bool syncFileToDisk(const std::filesystem::path& file) {
+#ifdef _WIN32
+    HANDLE handle = CreateFileW(file.c_str(), GENERIC_WRITE,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return false;
+
+    const bool flushSucceeded = FlushFileBuffers(handle) != 0;
+    const bool closeSucceeded = CloseHandle(handle) != 0;
+    return flushSucceeded && closeSucceeded;
+#else
+    int flags = O_WRONLY;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+    const int descriptor = ::open(file.c_str(), flags);
+    if (descriptor < 0) return false;
+
+    const bool flushSucceeded = ::fsync(descriptor) == 0;
+    const bool closeSucceeded = ::close(descriptor) == 0;
+    return flushSucceeded && closeSucceeded;
+#endif
+}
+
 } // namespace
 
 RecoveryJournal::RecoveryJournal(std::filesystem::path file) : file_(std::move(file)) {}
@@ -97,7 +122,8 @@ bool RecoveryJournal::record(const std::string& stage, const std::string& detail
     out.flush();
     const bool writeSucceeded = out.good();
     out.close();
-    return writeSucceeded && !out.fail();
+    if (!writeSucceeded || out.fail()) return false;
+    return syncFileToDisk(file_);
 }
 
 bool RecoveryJournal::record(const std::string& transactionId,
@@ -127,7 +153,8 @@ bool RecoveryJournal::record(const std::string& transactionId,
     out.flush();
     const bool writeSucceeded = out.good();
     out.close();
-    return writeSucceeded && !out.fail();
+    if (!writeSucceeded || out.fail()) return false;
+    return syncFileToDisk(file_);
 }
 
 std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {

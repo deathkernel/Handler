@@ -240,6 +240,25 @@ int main() {
     assert(directoryJournal.hasUnfinishedTransaction());
     std::filesystem::remove_all(journalDirectoryPath, testEc);
 
+    // Large records must remain intact after the append stream closes and the journal is reopened.
+    const auto durableJournalFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-durable-test.log";
+    std::filesystem::remove(durableJournalFile, testEc);
+    RecoveryJournal durableJournal(durableJournalFile);
+    const auto durableTransaction = RecoveryJournal::newTransactionId();
+    const std::string longJournalDetails(64 * 1024, 'x');
+    assert(durableJournal.record(durableTransaction, "START", longJournalDetails));
+    {
+        std::ifstream persistedJournal(durableJournalFile);
+        std::string persistedLine;
+        assert(std::getline(persistedJournal, persistedLine));
+        assert(persistedLine.find("tx=" + durableTransaction) != std::string::npos);
+        assert(persistedLine.size() > longJournalDetails.size());
+    }
+    assert(!durableJournal.hasCorruptEntries());
+    assert(durableJournal.record(durableTransaction, "COMMIT", "complete"));
+    assert(!durableJournal.hasUnfinishedTransaction());
+    std::filesystem::remove(durableJournalFile, testEc);
+
     const auto journalTestFile = std::filesystem::temp_directory_path() / "handler-recovery-journal-test.log";
     std::filesystem::remove(journalTestFile, testEc);
     RecoveryJournal journalTest(journalTestFile);
