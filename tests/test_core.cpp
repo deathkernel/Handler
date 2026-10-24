@@ -266,6 +266,30 @@ int main() {
     assert(journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
 
+    const auto missingJournalRoot =
+        std::filesystem::temp_directory_path() / "handler-missing-journal-test";
+    std::filesystem::remove_all(missingJournalRoot, testEc);
+    RecoveryJournal missingJournal(missingJournalRoot / "recovery.log");
+    assert(!missingJournal.hasCorruptEntries());
+    assert(!missingJournal.hasUnfinishedTransaction());
+
+    // Keep transaction tests isolated from persistent state on the developer/CI host.
+    const auto transactionTestsStateRoot =
+        std::filesystem::temp_directory_path() / "handler-transaction-tests-state";
+    std::filesystem::remove_all(transactionTestsStateRoot, testEc);
+    const char* oldTransactionTestStateRootRaw = nullptr;
+#ifdef _WIN32
+    oldTransactionTestStateRootRaw = std::getenv("LOCALAPPDATA");
+    const std::string oldTransactionTestStateRoot =
+        oldTransactionTestStateRootRaw ? oldTransactionTestStateRootRaw : "";
+    _putenv_s("LOCALAPPDATA", transactionTestsStateRoot.string().c_str());
+#else
+    oldTransactionTestStateRootRaw = std::getenv("XDG_STATE_HOME");
+    const std::string oldTransactionTestStateRoot =
+        oldTransactionTestStateRootRaw ? oldTransactionTestStateRootRaw : "";
+    setenv("XDG_STATE_HOME", transactionTestsStateRoot.string().c_str(), 1);
+#endif
+
     bool rollbackCalled = false;
     Transaction failedAction(SafetyMode::Auto);
     const auto actionFailure = failedAction.run(
@@ -319,6 +343,11 @@ int main() {
     assert(!rollbackException.committed);
     assert(!rollbackException.rolledBack);
     assert(rollbackException.details == "action failed; rollback invoked");
+    RecoveryJournal throwingRollbackJournal(handlerTransactionRoot() / "recovery.log");
+    assert(throwingRollbackJournal.hasUnfinishedTransaction());
+    const bool clearedThrowingRollbackJournal = std::filesystem::remove(
+        handlerTransactionRoot() / "recovery.log", testEc);
+    assert(clearedThrowingRollbackJournal && !testEc);
 
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
     std::filesystem::remove_all(cleanupRoot, testEc);
@@ -391,6 +420,13 @@ int main() {
         [] { return VerificationResult{true, "not reached", ""}; },
         [] { return false; });
     assert(!rollbackFail.committed && !rollbackFail.rolledBack);
+#ifdef _WIN32
+    _putenv_s("LOCALAPPDATA", oldTransactionTestStateRoot.c_str());
+#else
+    if (oldTransactionTestStateRoot.empty()) unsetenv("XDG_STATE_HOME");
+    else setenv("XDG_STATE_HOME", oldTransactionTestStateRoot.c_str(), 1);
+#endif
+    std::filesystem::remove_all(transactionTestsStateRoot, testEc);
 
     // A failed rollback must remain visible as an unfinished recovery transaction.
     const auto isolatedStateRoot = std::filesystem::temp_directory_path() / "handler-rollback-recovery-state";
@@ -422,6 +458,69 @@ int main() {
     else setenv("XDG_STATE_HOME", oldStateRoot.c_str(), 1);
 #endif
     std::filesystem::remove_all(isolatedStateRoot, testEc);
+
+    // A failed terminal journal write must be reported and leave recovery blocked.
+    const auto journalFailureStateRoot =
+        std::filesystem::temp_directory_path() / "handler-rollback-journal-failure-state";
+    std::filesystem::remove_all(journalFailureStateRoot, testEc);
+    const char* oldJournalFailureRootRaw = nullptr;
+#ifdef _WIN32
+    oldJournalFailureRootRaw = std::getenv("LOCALAPPDATA");
+    const std::string oldJournalFailureRoot =
+        oldJournalFailureRootRaw ? oldJournalFailureRootRaw : "";
+    _putenv_s("LOCALAPPDATA", journalFailureStateRoot.string().c_str());
+#else
+    oldJournalFailureRootRaw = std::getenv("XDG_STATE_HOME");
+    const std::string oldJournalFailureRoot =
+        oldJournalFailureRootRaw ? oldJournalFailureRootRaw : "";
+    setenv("XDG_STATE_HOME", journalFailureStateRoot.string().c_str(), 1);
+#endif
+    bool journalFailureRollbackCalled = false;
+    Transaction journalFailureTx(SafetyMode::Auto);
+    const auto journalFailure = journalFailureTx.run(
+        RiskLevel::Low,
+        [&] {
+            const auto journalFile = handlerTransactionRoot() / "recovery.log";
+            std::error_code journalFailureEc;
+            const bool journalRemoved =
+                std::filesystem::remove(journalFile, journalFailureEc);
+            assert(journalRemoved && !journalFailureEc);
+            const bool journalReplacedByDirectory =
+                std::filesystem::create_directory(journalFile, journalFailureEc);
+            assert(journalReplacedByDirectory && !journalFailureEc);
+            return false;
+        },
+        [] { return VerificationResult{true, "unused", "unused"}; },
+        [&] { journalFailureRollbackCalled = true; return true; });
+    assert(!journalFailure.committed && journalFailure.rolledBack);
+    assert(journalFailureRollbackCalled);
+    assert(journalFailure.details.find("recovery journal could not record") !=
+           std::string::npos);
+    assert(journalFailure.details.find("recovery remains blocked") !=
+           std::string::npos);
+
+    RecoveryJournal failedOutcomeJournal(handlerTransactionRoot() / "recovery.log");
+    assert(failedOutcomeJournal.hasCorruptEntries());
+    assert(failedOutcomeJournal.hasUnfinishedTransaction());
+
+    bool subsequentActionRan = false;
+    Transaction blockedAfterJournalFailure(SafetyMode::Auto);
+    const auto blockedAfterFailure = blockedAfterJournalFailure.run(
+        RiskLevel::Low,
+        [&] { subsequentActionRan = true; return true; },
+        [] { return VerificationResult{true, "verified", ""}; },
+        [] { return true; });
+    assert(!blockedAfterFailure.committed);
+    assert(!subsequentActionRan);
+    assert(blockedAfterFailure.details ==
+           "transaction blocked: recovery journal is corrupt or a previous transaction requires recovery");
+#ifdef _WIN32
+    _putenv_s("LOCALAPPDATA", oldJournalFailureRoot.c_str());
+#else
+    if (oldJournalFailureRoot.empty()) unsetenv("XDG_STATE_HOME");
+    else setenv("XDG_STATE_HOME", oldJournalFailureRoot.c_str(), 1);
+#endif
+    std::filesystem::remove_all(journalFailureStateRoot, testEc);
 
     const auto low = evaluatePolicy(SafetyMode::Confirm, RiskLevel::Low);
     assert(low.allowed && !low.requiresConfirmation);
