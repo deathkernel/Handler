@@ -266,6 +266,23 @@ int main() {
     assert(journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
 
+    // Keep transaction tests isolated from persistent state on the developer/CI host.
+    const auto transactionTestsStateRoot =
+        std::filesystem::temp_directory_path() / "handler-transaction-tests-state";
+    std::filesystem::remove_all(transactionTestsStateRoot, testEc);
+    const char* oldTransactionTestStateRootRaw = nullptr;
+#ifdef _WIN32
+    oldTransactionTestStateRootRaw = std::getenv("LOCALAPPDATA");
+    const std::string oldTransactionTestStateRoot =
+        oldTransactionTestStateRootRaw ? oldTransactionTestStateRootRaw : "";
+    _putenv_s("LOCALAPPDATA", transactionTestsStateRoot.string().c_str());
+#else
+    oldTransactionTestStateRootRaw = std::getenv("XDG_STATE_HOME");
+    const std::string oldTransactionTestStateRoot =
+        oldTransactionTestStateRootRaw ? oldTransactionTestStateRootRaw : "";
+    setenv("XDG_STATE_HOME", transactionTestsStateRoot.string().c_str(), 1);
+#endif
+
     bool rollbackCalled = false;
     Transaction failedAction(SafetyMode::Auto);
     const auto actionFailure = failedAction.run(
@@ -319,6 +336,11 @@ int main() {
     assert(!rollbackException.committed);
     assert(!rollbackException.rolledBack);
     assert(rollbackException.details == "action failed; rollback invoked");
+    RecoveryJournal throwingRollbackJournal(handlerTransactionRoot() / "recovery.log");
+    assert(throwingRollbackJournal.hasUnfinishedTransaction());
+    const bool clearedThrowingRollbackJournal = std::filesystem::remove(
+        handlerTransactionRoot() / "recovery.log", testEc);
+    assert(clearedThrowingRollbackJournal && !testEc);
 
     const auto cleanupRoot = std::filesystem::temp_directory_path() / "handler_cleanup_test";
     std::filesystem::remove_all(cleanupRoot, testEc);
@@ -391,6 +413,13 @@ int main() {
         [] { return VerificationResult{true, "not reached", ""}; },
         [] { return false; });
     assert(!rollbackFail.committed && !rollbackFail.rolledBack);
+#ifdef _WIN32
+    _putenv_s("LOCALAPPDATA", oldTransactionTestStateRoot.c_str());
+#else
+    if (oldTransactionTestStateRoot.empty()) unsetenv("XDG_STATE_HOME");
+    else setenv("XDG_STATE_HOME", oldTransactionTestStateRoot.c_str(), 1);
+#endif
+    std::filesystem::remove_all(transactionTestsStateRoot, testEc);
 
     // A failed rollback must remain visible as an unfinished recovery transaction.
     const auto isolatedStateRoot = std::filesystem::temp_directory_path() / "handler-rollback-recovery-state";
@@ -476,7 +505,8 @@ int main() {
         [] { return true; });
     assert(!blockedAfterFailure.committed);
     assert(!subsequentActionRan);
-    assert(blockedAfterFailure.details == "transaction aborted: recovery journal unavailable");
+    assert(blockedAfterFailure.details ==
+           "transaction blocked: recovery journal is corrupt or a previous transaction requires recovery");
 #ifdef _WIN32
     _putenv_s("LOCALAPPDATA", oldJournalFailureRoot.c_str());
 #else
