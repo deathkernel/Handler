@@ -181,6 +181,11 @@ std::vector<std::string> RecoveryJournal::unfinishedTransactionIds() const {
 
 bool RecoveryJournal::hasCorruptEntries() const {
     std::error_code pathError;
+    const bool fileExists = std::filesystem::exists(file_, pathError);
+    if (pathError) return true;
+    if (!fileExists) return false;
+
+    pathError.clear();
     if (std::filesystem::is_directory(file_, pathError) || pathError)
         return true;
 
