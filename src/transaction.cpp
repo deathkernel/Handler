@@ -58,6 +58,11 @@ TransactionResult Transaction::runInternal(bool approved, RiskLevel risk,
         return {false, false, false, {}, "transaction blocked: another Handler transaction is already active"};
 
     RecoveryJournal journal(root / "recovery.log");
+    if (journal.hasUnfinishedTransaction()) {
+        return {false, false, false, {},
+                "transaction blocked: recovery journal is corrupt or a previous transaction requires recovery"};
+    }
+
     const auto transactionId = RecoveryJournal::newTransactionId();
     if (!journal.record(transactionId, "START", "transaction started"))
         return {false, false, false, {}, "transaction aborted: recovery journal unavailable"};
