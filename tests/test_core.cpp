@@ -266,6 +266,13 @@ int main() {
     assert(journalTest.hasUnfinishedTransaction());
     std::filesystem::remove(journalTestFile, testEc);
 
+    const auto missingJournalRoot =
+        std::filesystem::temp_directory_path() / "handler-missing-journal-test";
+    std::filesystem::remove_all(missingJournalRoot, testEc);
+    RecoveryJournal missingJournal(missingJournalRoot / "recovery.log");
+    assert(!missingJournal.hasCorruptEntries());
+    assert(!missingJournal.hasUnfinishedTransaction());
+
     // Keep transaction tests isolated from persistent state on the developer/CI host.
     const auto transactionTestsStateRoot =
         std::filesystem::temp_directory_path() / "handler-transaction-tests-state";
